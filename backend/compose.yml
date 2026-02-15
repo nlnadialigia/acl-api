@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: acl
+    restart: always
+    environment:
+      POSTGRES_USER: acl
+      POSTGRES_PASSWORD: acl
+      POSTGRES_DB: acl_db
+    ports:
+      - "6006:5432"
+
+  redis:
+    image: redis:latest
+    container_name: acl_redis
+    ports:
+      - "6379:6379"
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: acl_mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
