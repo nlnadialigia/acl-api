@@ -1,6 +1,7 @@
 import {CanActivate, ExecutionContext, ForbiddenException, Injectable} from '@nestjs/common';
 import {Reflector} from '@nestjs/core';
 import {PermissionStatus, Role, ScopeType} from '@prisma/client';
+import {PermissionCacheService} from '../../plugins/permission-cache.service';
 import {PrismaService} from '../../prisma/prisma.service';
 import {PLUGIN_ACCESS_KEY, PluginAccessOptions} from '../decorators/plugin-access.decorator';
 
@@ -9,6 +10,7 @@ export class PluginAccessGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
+    private cache: PermissionCacheService,
   ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -33,24 +35,32 @@ export class PluginAccessGuard implements CanActivate {
       return true;
     }
 
-    // Extract scopeId from request if applicable (param, query, or body)
-    // For now, checking 'scopeId' in params as a default convention
     const requestedScopeId = request.params.scopeId || request.query.scopeId || request.body.scopeId;
 
-    // Fetch user permissions for this plugin
-    const permissions = await this.prisma.pluginPermission.findMany({
-      where: {
-        userId: user.userId,
-        plugin: {name: options.pluginName},
-        status: PermissionStatus.ACTIVE,
-      },
-      include: {
-        plugin: true,
-      }
-    });
+    // Try Cache First
+    let permissions = await this.cache.getPermissions(user.userId, options.pluginName);
 
-    if (permissions.length === 0) {
-      throw new ForbiddenException(`No active permissions for plugin ${options.pluginName}`);
+    if (!permissions) {
+      // Fallback to Database
+      const dbPermissions = await this.prisma.pluginPermission.findMany({
+        where: {
+          userId: user.userId,
+          plugin: {name: options.pluginName},
+          status: PermissionStatus.ACTIVE,
+        },
+      });
+
+      if (dbPermissions.length === 0) {
+        throw new ForbiddenException(`No active permissions for plugin ${options.pluginName}`);
+      }
+
+      permissions = dbPermissions.map(p => ({
+        scopeType: p.scopeType,
+        scopeId: p.scopeId,
+      }));
+
+      // Update Cache
+      await this.cache.setPermissions(user.userId, options.pluginName, permissions);
     }
 
     // Check for GLOBAL permission
@@ -80,10 +90,6 @@ export class PluginAccessGuard implements CanActivate {
         }
       }
     } else {
-      // No specific scope requested (e.g., listing plugin data), 
-      // but user has at least one permission for this plugin. 
-      // Requirement RF03/RF08 implies seeing the plugin is enough if they have any access?
-      // For strictness, if they have ANY access they can hit a root plugin endpoint.
       return true;
     }
 
