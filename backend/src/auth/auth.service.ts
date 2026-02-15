@@ -1,19 +1,16 @@
 import {Injectable, UnauthorizedException} from '@nestjs/common';
 import {JwtService} from '@nestjs/jwt';
-import {Role} from '@prisma/client';
-import {PrismaService} from '../prisma/prisma.service';
+import {UsersService} from '../users/users.service';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private prisma: PrismaService,
+    private usersService: UsersService,
     private jwtService: JwtService,
   ) { }
 
   async login(email: string) {
-    const user = await this.prisma.user.findUnique({
-      where: {email},
-    });
+    const user = await this.usersService.findByEmail(email);
 
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -34,14 +31,5 @@ export class AuthService {
         role: user.role,
       },
     };
-  }
-
-  // Temporary helper for registration/seeding or testing
-  async createTestUser(email: string, name: string, role: Role = Role.USER) {
-    return this.prisma.user.upsert({
-      where: {email},
-      update: {name, role},
-      create: {email, name, role},
-    });
   }
 }
