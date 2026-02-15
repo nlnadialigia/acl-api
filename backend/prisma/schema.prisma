@@ -1,8 +1,170 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// 2.1 Enums
+enum Role {
+  PORTAL_ADMIN
+  PLUGIN_MANAGER
+  USER
+}
+
+enum ScopeType {
+  GLOBAL
+  UNIT
+  FACTORY
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PermissionStatus {
+  ACTIVE
+  REVOKED
+}
+
+// 2.2 Models
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  managedPlugins  PluginManager[]
+  permissions     PluginPermission[]
+  accessRequests  AccessRequest[]      @relation("Requester")
+  actionsAsActor  PermissionAuditLog[] @relation("Actor")
+  actionsAsTarget PermissionAuditLog[] @relation("Target")
+  notifications   Notification[]
+
+  @@map("users")
+}
+
+model Plugin {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  managers       PluginManager[]
+  permissions    PluginPermission[]
+  accessRequests AccessRequest[]
+
+  @@map("plugins")
+}
+
+model PluginManager {
+  id        String   @id @default(uuid())
+  userId    String
+  pluginId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  plugin Plugin @relation(fields: [pluginId], references: [id])
+
+  @@unique([userId, pluginId])
+  @@map("plugin_managers")
+}
+
+model Unit {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  factories Factory[]
+
+  @@map("units")
+}
+
+model Factory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  unitId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@map("factories")
+}
+
+model PluginPermission {
+  id          String           @id @default(uuid())
+  userId      String
+  pluginId    String
+  scopeType   ScopeType
+  scopeId     String? // ID of Unit or Factory, null if GLOBAL
+  status      PermissionStatus @default(ACTIVE)
+  grantedAt   DateTime         @default(now())
+  grantedById String? // Who granted this permission
+
+  user   User   @relation(fields: [userId], references: [id])
+  plugin Plugin @relation(fields: [pluginId], references: [id])
+
+  // 2.3 Indexes
+  @@index([userId, pluginId])
+  @@index([userId, status])
+  @@map("plugin_permissions")
+}
+
+model AccessRequest {
+  id           String        @id @default(uuid())
+  userId       String
+  pluginId     String
+  scopeType    ScopeType
+  scopeId      String?
+  status       RequestStatus @default(PENDING)
+  requestedAt  DateTime      @default(now())
+  resolvedAt   DateTime?
+  resolvedById String?
+
+  user   User   @relation("Requester", fields: [userId], references: [id])
+  plugin Plugin @relation(fields: [pluginId], references: [id])
+
+  // 2.3 Indexes
+  @@index([pluginId, status])
+  @@map("access_requests")
+}
+
+model PermissionAuditLog {
+  id         String   @id @default(uuid())
+  action     String // GRANT, REVOKE, APPROVE, DENY
+  actorId    String // Who performed the action
+  targetId   String? // Who was affected (if applicable)
+  resourceId String? // Plugin ID, Request ID, etc.
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  actor  User  @relation("Actor", fields: [actorId], references: [id])
+  target User? @relation("Target", fields: [targetId], references: [id])
+
+  @@map("permission_audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
 }
