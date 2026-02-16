@@ -16,6 +16,7 @@ export interface AccessRequest {
   id: string;
   userId: string;
   pluginId: string;
+  roleId: string;
   scopeType: ScopeType;
   scopeId?: string;
   status: RequestStatus;
@@ -24,6 +25,22 @@ export interface AccessRequest {
   resolvedById?: string;
   user?: User;
   plugin?: Plugin;
+  role?: PluginRole;
+}
+
+export interface PluginPermissionDefinition {
+  id: string;
+  pluginId?: string;
+  name: string;
+  label: string;
+}
+
+export interface PluginRole {
+  id: string;
+  pluginId: string;
+  name: string;
+  description?: string;
+  definitions?: PluginPermissionDefinition[];
 }
 
 export interface Plugin {
@@ -32,15 +49,20 @@ export interface Plugin {
   description: string;
   icon?: string;
   isPublic: boolean;
+  isActive: boolean;
+  roleDefinitions?: PluginRole[];
+  availableDefinitions?: PluginPermissionDefinition[];
 }
 
 export interface PluginPermission {
   id: string;
   userId: string;
   pluginId: string;
+  roleId: string;
   scopeType: ScopeType;
   scopeId?: string;
   status: PermissionStatus;
+  role?: PluginRole;
 }
 
 export interface Notification {

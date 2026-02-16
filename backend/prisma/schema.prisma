@@ -62,11 +62,43 @@ model Plugin {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  managers       PluginManager[]
-  permissions    PluginPermission[]
-  accessRequests AccessRequest[]
+  managers             PluginManager[]
+  permissions          PluginPermission[]
+  accessRequests       AccessRequest[]
+  roleDefinitions      PluginRole[]
+  availableDefinitions PluginPermissionDefinition[]
 
   @@map("plugins")
+}
+
+model PluginPermissionDefinition {
+  id        String   @id @default(uuid())
+  pluginId  String? // Null if it's a "Global" default permission definition
+  name      String // e.g., "users:read"
+  label     String // e.g., "Visualizar Usuários"
+  createdAt DateTime @default(now())
+
+  plugin Plugin?      @relation(fields: [pluginId], references: [id])
+  roles  PluginRole[] @relation("RoleToDefinition")
+
+  @@unique([pluginId, name])
+  @@map("plugin_permission_definitions")
+}
+
+model PluginRole {
+  id          String   @id @default(uuid())
+  pluginId    String
+  name        String // e.g., "Editor"
+  description String?
+  createdAt   DateTime @default(now())
+
+  plugin      Plugin                       @relation(fields: [pluginId], references: [id])
+  definitions PluginPermissionDefinition[] @relation("RoleToDefinition")
+  permissions PluginPermission[]
+  requests    AccessRequest[]
+
+  @@unique([pluginId, name])
+  @@map("plugin_roles")
 }
 
 model PluginManager {
@@ -112,14 +144,16 @@ model PluginPermission {
   scopeType   ScopeType
   scopeId     String? // ID of Unit or Factory, null if GLOBAL
   status      PermissionStatus @default(ACTIVE)
+  roleId      String
   grantedAt   DateTime         @default(now())
   grantedById String? // Who granted this permission
 
-  user   User   @relation(fields: [userId], references: [id])
-  plugin Plugin @relation(fields: [pluginId], references: [id])
+  user   User       @relation(fields: [userId], references: [id])
+  plugin Plugin     @relation(fields: [pluginId], references: [id])
+  role   PluginRole @relation(fields: [roleId], references: [id])
 
   // 2.3 Indexes
-  @@unique([userId, pluginId])
+  @@unique([userId, pluginId, scopeType, scopeId])
   @@index([userId, status])
   @@map("plugin_permissions")
 }
@@ -128,6 +162,7 @@ model AccessRequest {
   id           String        @id @default(uuid())
   userId       String
   pluginId     String
+  roleId       String
   scopeType    ScopeType
   scopeId      String?
   status       RequestStatus @default(PENDING)
@@ -135,8 +170,9 @@ model AccessRequest {
   resolvedAt   DateTime?
   resolvedById String?
 
-  user   User   @relation("Requester", fields: [userId], references: [id])
-  plugin Plugin @relation(fields: [pluginId], references: [id])
+  user   User       @relation("Requester", fields: [userId], references: [id])
+  plugin Plugin     @relation(fields: [pluginId], references: [id])
+  role   PluginRole @relation(fields: [roleId], references: [id])
 
   // 2.3 Indexes
   @@index([pluginId, status])

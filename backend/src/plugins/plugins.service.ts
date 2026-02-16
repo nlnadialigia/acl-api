@@ -65,4 +65,56 @@ export class PluginsService {
       include: {factories: true},
     });
   }
+
+  // --- Granular Permissions & Roles ---
+
+  async createPermissionDefinition(data: {pluginId?: string, name: string, label: string;}) {
+    return this.prisma.pluginPermissionDefinition.create({
+      data,
+    });
+  }
+
+  async listPermissionDefinitions(pluginId?: string) {
+    return this.prisma.pluginPermissionDefinition.findMany({
+      where: {
+        OR: [
+          {pluginId: null},
+          {pluginId: pluginId},
+        ],
+      },
+    });
+  }
+
+  async createRole(data: {pluginId: string, name: string, description?: string, definitionIds: string[];}) {
+    return this.prisma.pluginRole.create({
+      data: {
+        pluginId: data.pluginId,
+        name: data.name,
+        description: data.description,
+        definitions: {
+          connect: data.definitionIds.map(id => ({id})),
+        },
+      },
+      include: {definitions: true},
+    });
+  }
+
+  async listRoles(pluginId: string) {
+    return this.prisma.pluginRole.findMany({
+      where: {pluginId},
+      include: {definitions: true},
+    });
+  }
+
+  async getPluginWithAcl(id: string) {
+    return this.prisma.plugin.findUnique({
+      where: {id},
+      include: {
+        roleDefinitions: {
+          include: {definitions: true},
+        },
+        availableDefinitions: true,
+      },
+    });
+  }
 }

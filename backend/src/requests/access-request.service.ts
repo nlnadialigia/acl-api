@@ -16,16 +16,21 @@ export class AccessRequestService {
     private cache: PermissionCacheService,
   ) { }
 
-  async createRequest(userId: string, pluginId: string, scopeType: ScopeType, scopeId?: string) {
+  async createRequest(userId: string, pluginId: string, scopeType: ScopeType, scopeId?: string, roleId?: string) {
     // Check if plugin exists
     const plugin = await this.prisma.plugin.findUnique({where: {id: pluginId}});
     if (!plugin) throw new NotFoundException('Plugin not found');
 
-    // Check for existing pending request
+    // If roleId is not provided, we need a default role or throw error
+    if (!roleId) throw new BadRequestException('Role must be specified');
+
+    // Check for existing pending request for this specific scope/role combination
+    // Note: The unique constraint is [userId, pluginId, scopeType, scopeId], but for requests we might allow multiple roles to be pending?
+    // Actually, usually one pending per scope is enough.
     const existing = await this.prisma.accessRequest.findFirst({
-      where: {userId, pluginId, status: RequestStatus.PENDING},
+      where: {userId, pluginId, scopeType, scopeId, status: RequestStatus.PENDING},
     });
-    if (existing) throw new BadRequestException('A pending request already exists for this plugin');
+    if (existing) throw new BadRequestException('A pending request already exists for this scope/plugin');
 
     if (plugin.isPublic) {
       return this.prisma.$transaction(async (tx) => {
@@ -34,29 +39,35 @@ export class AccessRequestService {
           data: {
             userId,
             pluginId,
+            roleId,
             scopeType,
             scopeId,
             status: RequestStatus.APPROVED,
             resolvedAt: new Date(),
           },
-          include: {user: true},
+          include: {user: true, role: true},
         });
 
         // 2. Create/Update Permission
         await tx.pluginPermission.upsert({
           where: {
-            userId_pluginId: {userId, pluginId}
-          },
+            userId_pluginId_scopeType_scopeId: {
+              userId,
+              pluginId,
+              scopeType,
+              scopeId: scopeId ?? null,
+            }
+          } as any,
           update: {
             status: PermissionStatus.ACTIVE,
-            scopeType,
-            scopeId,
+            roleId,
           },
           create: {
             userId,
             pluginId,
+            roleId,
             scopeType,
-            scopeId,
+            scopeId: scopeId ?? null,
             status: PermissionStatus.ACTIVE,
           },
         });
@@ -66,18 +77,18 @@ export class AccessRequestService {
           targetId: userId,
           resourceId: pluginId,
           action: 'AUTO_APPROVE',
-          actorId: userId, // User self-granted access to a public plugin
-          details: {requestId: request.id, scope: scopeType, scopeId},
+          actorId: userId,
+          details: {requestId: request.id, scope: scopeType, scopeId, role: request.role.name},
         });
 
         // 4. Invalidate Cache
         await this.cache.invalidate(userId, plugin.name);
 
-        // 5. Notify User (Optional, but good for consistency)
+        // 5. Notify User
         await this.notification.notify(
           userId,
           'Acesso Concedido',
-          `Você agora tem acesso ao plugin público ${plugin.name}.`,
+          `Você agora tem acesso ao plugin público ${plugin.name} como ${request.role.name}.`,
         );
 
         return request;
@@ -88,6 +99,7 @@ export class AccessRequestService {
       data: {
         userId,
         pluginId,
+        roleId,
         scopeType,
         scopeId,
         status: RequestStatus.PENDING,
@@ -98,7 +110,7 @@ export class AccessRequestService {
   async listRequests(actor: {userId: string, role: Role;}) {
     if (actor.role === Role.PORTAL_ADMIN) {
       return this.prisma.accessRequest.findMany({
-        include: {user: true, plugin: true},
+        include: {user: true, plugin: true, role: true},
         orderBy: {requestedAt: 'desc'},
       });
     }
@@ -112,7 +124,7 @@ export class AccessRequestService {
 
     return this.prisma.accessRequest.findMany({
       where: {pluginId: {in: pluginIds}},
-      include: {user: true, plugin: true},
+      include: {user: true, plugin: true, role: true},
       orderBy: {requestedAt: 'desc'},
     });
   }
@@ -132,38 +144,40 @@ export class AccessRequestService {
       const updatedRequest = await tx.accessRequest.update({
         where: {id: requestId},
         data: {status: RequestStatus.APPROVED, resolvedById: actorId, resolvedAt: new Date()},
+        include: {role: true},
       });
 
-      // 2. Create Permission (Upsert logic: enable if exists but inactive, or create new)
+      // 2. Create Permission
       await tx.pluginPermission.upsert({
         where: {
-          userId_pluginId: {
+          userId_pluginId_scopeType_scopeId: {
             userId: request.userId,
             pluginId: request.pluginId,
+            scopeType: request.scopeType,
+            scopeId: request.scopeId ?? null,
           }
-        },
+        } as any,
         update: {
           status: PermissionStatus.ACTIVE,
-          scopeType: request.scopeType,
-          scopeId: request.scopeId,
+          roleId: request.roleId,
         },
         create: {
           userId: request.userId,
           pluginId: request.pluginId,
+          roleId: request.roleId,
           scopeType: request.scopeType,
-          scopeId: request.scopeId,
+          scopeId: request.scopeId ?? null,
           status: PermissionStatus.ACTIVE,
         },
       });
 
-      // Async/Post-hook actions (usually done via events, but we'll do here for simplicity)
       // 3. Audit Log
       await this.audit.log({
         targetId: request.userId,
         resourceId: request.pluginId,
         action: 'APPROVE_ACCESS',
         actorId: actorId,
-        details: {requestId, scope: request.scopeType, scopeId: request.scopeId},
+        details: {requestId, scope: request.scopeType, scopeId: request.scopeId, role: updatedRequest.role.name},
       });
 
       // 4. Invalidate Cache
@@ -207,12 +221,19 @@ export class AccessRequestService {
     return updatedRequest;
   }
 
-  async revokePermission(userId: string, pluginId: string, actorId: string) {
+  async revokePermission(userId: string, pluginId: string, scopeType: ScopeType, scopeId: string | null, actorId: string) {
     const plugin = await this.prisma.plugin.findUnique({where: {id: pluginId}});
     if (!plugin) throw new NotFoundException('Plugin not found');
 
     const permission = await this.prisma.pluginPermission.findUnique({
-      where: {userId_pluginId: {userId, pluginId}},
+      where: {
+        userId_pluginId_scopeType_scopeId: {
+          userId,
+          pluginId,
+          scopeType,
+          scopeId: scopeId ?? null,
+        }
+      } as any,
     });
 
     if (!permission) throw new NotFoundException('Permission not found');
@@ -220,7 +241,14 @@ export class AccessRequestService {
     return this.prisma.$transaction(async (tx) => {
       // 1. Mark permission as REVOKED
       const updatedPermission = await tx.pluginPermission.update({
-        where: {userId_pluginId: {userId, pluginId}},
+        where: {
+          userId_pluginId_scopeType_scopeId: {
+            userId,
+            pluginId,
+            scopeType,
+            scopeId: scopeId ?? null,
+          }
+        } as any,
         data: {status: PermissionStatus.REVOKED},
       });
 
@@ -246,7 +274,7 @@ export class AccessRequestService {
     });
   }
 
-  async grantAccess(data: {userId: string; pluginId: string; scopeType: ScopeType; scopeId?: string;}, actor: {userId: string, role: Role;}) {
+  async grantAccess(data: {userId: string; pluginId: string; roleId: string; scopeType: ScopeType; scopeId?: string;}, actor: {userId: string, role: Role;}) {
     const plugin = await this.prisma.plugin.findUnique({where: {id: data.pluginId}});
     if (!plugin) throw new NotFoundException('Plugin not found');
 
@@ -262,21 +290,26 @@ export class AccessRequestService {
       // 1. Upsert Permission
       const permission = await tx.pluginPermission.upsert({
         where: {
-          userId_pluginId: {userId: data.userId, pluginId: data.pluginId}
-        },
+          userId_pluginId_scopeType_scopeId: {
+            userId: data.userId,
+            pluginId: data.pluginId,
+            scopeType: data.scopeType,
+            scopeId: data.scopeId ?? null,
+          }
+        } as any,
         update: {
           status: PermissionStatus.ACTIVE,
-          scopeType: data.scopeType,
-          scopeId: data.scopeId,
+          roleId: data.roleId,
         },
         create: {
           userId: data.userId,
           pluginId: data.pluginId,
+          roleId: data.roleId,
           scopeType: data.scopeType,
-          scopeId: data.scopeId,
+          scopeId: data.scopeId ?? null,
           status: PermissionStatus.ACTIVE,
         },
-        include: {user: true},
+        include: {user: true, role: true},
       });
 
       // 2. Audit Log
@@ -285,7 +318,7 @@ export class AccessRequestService {
         resourceId: data.pluginId,
         action: 'GRANT_ACCESS',
         actorId: actor.userId,
-        details: {scope: data.scopeType, scopeId: data.scopeId},
+        details: {scope: data.scopeType, scopeId: data.scopeId, role: permission.role.name},
       });
 
       // 3. Invalidate Cache

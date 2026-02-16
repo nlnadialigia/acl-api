@@ -28,6 +28,46 @@ Este documento descreve como testar o fluxo completo da API de ACL, incluindo a 
 
 ---
 
+## 📂 0.1 Gestão de ACL (Admin/Manager)
+
+### Criar Definição de Permissão (Admin)
+*   **POST** `/admin/plugins/definitions`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+*   **Body**:
+    ```json
+    {
+      "name": "users:read",
+      "label": "Ler Usuários",
+      "pluginId": "ID_DO_PLUGIN" // Opcional (se null, é global)
+    }
+    ```
+
+### Listar Definições de um Plugin
+*   **GET** `/admin/plugins/{{pluginId}}/definitions` (ou `global` para globais)
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+
+### Criar Papel (Role) para Plugin (Manager/Admin)
+*   **POST** `/admin/plugins/{{pluginId}}/roles`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+*   **Body**:
+    ```json
+    {
+      "name": "Editor",
+      "description": "Pode ler e editar dados",
+      "definitionIds": ["ID_DEF_1", "ID_DEF_2"]
+    }
+    ```
+
+### Listar Roles de um Plugin
+*   **GET** `/admin/plugins/{{pluginId}}/roles`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+
+### Ver Estrutura Completa de ACL do Plugin
+*   **GET** `/admin/plugins/{{pluginId}}/acl`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+
+---
+
 ---
 
 ## 📂 1. Fluxo de Usuário (Cadastro e Login)
@@ -73,6 +113,7 @@ Para facilitar os testes, você pode importar toda a especificação da API de u
     ```json
     {
       "pluginId": "ID_DO_PLUGIN",
+      "roleId": "ID_DA_ROLE",
       "scopeType": "GLOBAL"
     }
     ```
@@ -97,6 +138,7 @@ Para facilitar os testes, você pode importar toda a especificação da API de u
     {
       "userId": "ID_DO_USER",
       "pluginId": "ID_DO_PLUGIN",
+      "roleId": "ID_DA_ROLE",
       "scopeType": "UNIT",
       "scopeId": "Unidade SP"
     }
@@ -122,7 +164,9 @@ Para facilitar os testes, você pode importar toda a especificação da API de u
     ```json
     {
       "userId": "ID_DO_USER",
-      "pluginId": "ID_DO_PLUGIN"
+      "pluginId": "ID_DO_PLUGIN",
+      "scopeType": "GLOBAL",
+      "scopeId": null
     }
     ```
 

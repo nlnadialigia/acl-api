@@ -22,7 +22,7 @@ import {
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {apiFetch} from "@/lib/api-client";
 import {useAuth} from "@/lib/auth-context";
-import type {AccessRequest, Plugin, ScopeType, User} from "@/lib/types";
+import type {AccessRequest, Plugin, PluginPermissionDefinition, PluginRole, ScopeType, User} from "@/lib/types";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {
   Check,
@@ -62,6 +62,15 @@ export function AdminPanel() {
   const [pluginDescription, setPluginDescription] = useState("");
   const [pluginIcon, setPluginIcon] = useState("");
   const [pluginIsPublic, setPluginIsPublic] = useState(false);
+
+  // ACL Management state
+  const [grantRoleId, setGrantRoleId] = useState("");
+  const [selectedAclPluginId, setSelectedAclPluginId] = useState<string | null>(null);
+  const [newDefName, setNewDefName] = useState("");
+  const [newDefLabel, setNewDefLabel] = useState("");
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleDesc, setNewRoleDesc] = useState("");
+  const [selectedDefIds, setSelectedDefIds] = useState<string[]>([]);
 
   // Queries
   const {data: pendingRequests, isLoading: requestsLoading} = useQuery<AccessRequest[]>({
@@ -103,11 +112,12 @@ export function AdminPanel() {
   });
 
   const grantAccessMutation = useMutation({
-    mutationFn: () => apiFetch("/requests/grant", { // Endpoint sugerido para admin conceder direto
+    mutationFn: () => apiFetch("/requests/grant", {
       method: "POST",
       body: JSON.stringify({
         userId: grantTargetUserId,
         pluginId: grantPluginId,
+        roleId: grantRoleId,
         scopeType: grantScopeType,
         scopeId: grantScopeType === "GLOBAL" ? undefined : grantScopeId,
       }),
@@ -141,6 +151,45 @@ export function AdminPanel() {
       setPluginIcon("");
       setPluginIsPublic(false);
     },
+  });
+
+  const createDefMutation = useMutation({
+    mutationFn: (data: {pluginId?: string; name: string; label: string;}) =>
+      apiFetch("/admin/plugins/definitions", {method: "POST", body: JSON.stringify(data)}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["definitions"]});
+      setNewDefName("");
+      setNewDefLabel("");
+    },
+  });
+
+  const createRoleMutation = useMutation({
+    mutationFn: (data: {pluginId: string; name: string; description: string; definitionIds: string[];}) =>
+      apiFetch(`/admin/plugins/${data.pluginId}/roles`, {method: "POST", body: JSON.stringify(data)}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["roles"]});
+      setNewRoleName("");
+      setNewRoleDesc("");
+      setSelectedDefIds([]);
+    },
+  });
+
+  const {data: allDefinitions} = useQuery<PluginPermissionDefinition[]>({
+    queryKey: ["definitions", selectedAclPluginId],
+    queryFn: () => apiFetch(`/admin/plugins/${selectedAclPluginId || 'global'}/definitions`),
+    enabled: !!selectedAclPluginId || isAdmin,
+  });
+
+  const {data: currentPluginRoles} = useQuery<PluginRole[]>({
+    queryKey: ["roles", selectedAclPluginId],
+    queryFn: () => apiFetch(`/admin/plugins/${selectedAclPluginId}/roles`),
+    enabled: !!selectedAclPluginId,
+  });
+
+  const {data: grantPluginRoles} = useQuery<PluginRole[]>({
+    queryKey: ["plugin-roles", grantPluginId],
+    queryFn: () => apiFetch(`/admin/plugins/${grantPluginId}/roles`),
+    enabled: !!grantPluginId,
   });
 
   const editPlugin = (plugin: Plugin) => {
@@ -230,6 +279,10 @@ export function AdminPanel() {
               <span className="hidden sm:inline">Plugins</span>
             </TabsTrigger>
           )}
+          <TabsTrigger value="acl" className="gap-2">
+            <Check className="h-4 w-4" />
+            <span className="hidden sm:inline">Roles & Permissões</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="requests" className="mt-4">
@@ -272,6 +325,11 @@ export function AdminPanel() {
                           <TableCell>
                             <Badge variant="secondary" className="bg-primary/15 text-primary border-primary/30 text-xs text-uppercase">
                               {getScopeLabel(req.scopeType, req.scopeId)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {req.role?.name || "Nível Padrão"}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-muted-foreground text-xs">
@@ -425,6 +483,152 @@ export function AdminPanel() {
             </Card>
           </TabsContent>
         )}
+        <TabsContent value="acl" className="mt-4">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* DEFINITIONS MANAGEMENT */}
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4" />
+                  Biblioteca de Permissões
+                </CardTitle>
+                <CardDescription>Defina as ações possíveis (ex: users:read)</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-2 p-3 bg-muted/50 rounded-lg">
+                  <Label>Vincular a Plugin (Opcional)</Label>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                    value={selectedAclPluginId || ""}
+                    onChange={(e) => setSelectedAclPluginId(e.target.value || null)}
+                  >
+                    <option value="">Permissão Global</option>
+                    {plugins?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+
+                {isAdmin && (
+                  <div className="space-y-3 p-3 border border-dashed rounded-lg">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        placeholder="Nome (ex: app:edit)"
+                        className="h-8 px-2 text-xs rounded border bg-background"
+                        value={newDefName}
+                        onChange={e => setNewDefName(e.target.value)}
+                      />
+                      <input
+                        placeholder="Label (ex: Editar App)"
+                        className="h-8 px-2 text-xs rounded border bg-background"
+                        value={newDefLabel}
+                        onChange={e => setNewDefLabel(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full h-8"
+                      disabled={!newDefName || !newDefLabel}
+                      onClick={() => createDefMutation.mutate({
+                        pluginId: selectedAclPluginId || undefined,
+                        name: newDefName,
+                        label: newDefLabel
+                      })}
+                    >
+                      Adicionar Permissão
+                    </Button>
+                  </div>
+                )}
+
+                <div className="max-h-[300px] overflow-y-auto space-y-1">
+                  {allDefinitions?.map(def => (
+                    <div key={def.id} className="flex items-center justify-between p-2 text-xs rounded hover:bg-muted/50 border border-transparent hover:border-border">
+                      <div className="flex flex-col">
+                        <span className="font-bold">{def.label}</span>
+                        <code className="text-[10px] text-muted-foreground">{def.name}</code>
+                      </div>
+                      {!def.pluginId && <Badge variant="outline" className="text-[10px]">Global</Badge>}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ROLE MANAGEMENT */}
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <Check className="h-4 w-4" />
+                  Papéis (Roles) do Plugin
+                </CardTitle>
+                <CardDescription>Agrupe permissões em papéis nomeados</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!selectedAclPluginId ? (
+                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm italic">
+                    Selecione um plugin ao lado para gerenciar papéis
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-3 p-3 border border-dashed rounded-lg bg-primary/5">
+                      <input
+                        placeholder="Nome do Papel (ex: Supervisor)"
+                        className="h-9 w-full px-3 text-sm rounded border bg-background"
+                        value={newRoleName}
+                        onChange={e => setNewRoleName(e.target.value)}
+                      />
+                      <div className="max-h-[150px] overflow-y-auto p-2 border rounded bg-background">
+                        <Label className="text-[10px] uppercase mb-1 block">Permissões Inclusas</Label>
+                        {allDefinitions?.map(def => (
+                          <label key={def.id} className="flex items-center gap-2 p-1 text-xs cursor-pointer hover:bg-muted rounded">
+                            <Checkbox
+                              checked={selectedDefIds.includes(def.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) setSelectedDefIds([...selectedDefIds, def.id]);
+                                else setSelectedDefIds(selectedDefIds.filter(id => id !== def.id));
+                              }}
+                            />
+                            {def.label}
+                          </label>
+                        ))}
+                      </div>
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        disabled={!newRoleName || selectedDefIds.length === 0}
+                        onClick={() => createRoleMutation.mutate({
+                          pluginId: selectedAclPluginId,
+                          name: newRoleName,
+                          description: newRoleDesc,
+                          definitionIds: selectedDefIds
+                        })}
+                      >
+                        Criar Novo Papel
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold">Papéis Existentes</Label>
+                      {currentPluginRoles?.map(role => (
+                        <div key={role.id} className="p-3 border rounded-lg bg-card">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-bold text-sm text-primary">{role.name}</span>
+                            <Badge variant="secondary" className="text-[10px]">{role.definitions?.length || 0} permissões</Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {role.definitions?.map(def => (
+                              <span key={def.id} className="text-[10px] bg-muted px-1.5 py-0.5 rounded border border-border">
+                                {def.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* APPROVE DIALOG */}
@@ -441,6 +645,9 @@ export function AdminPanel() {
                 </p>
                 <p className="text-sm">
                   <span className="font-medium">Plugin:</span> {selectedRequest.plugin?.name}
+                </p>
+                <p className="text-sm">
+                  <span className="font-medium">Papel solicitado:</span> {selectedRequest.role?.name || "Nível Padrão"}
                 </p>
               </div>
 
@@ -601,6 +808,21 @@ export function AdminPanel() {
               </select>
             </div>
 
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="grant-role">Selecionar Papel (Role)</Label>
+              <select
+                id="grant-role"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={grantRoleId}
+                onChange={(e) => setGrantRoleId(e.target.value)}
+              >
+                <option value="">Selecione um papel...</option>
+                {grantPluginRoles?.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex flex-col gap-3">
               <Label className="text-sm font-medium">Escopo</Label>
               <div className="grid grid-cols-3 gap-2">
@@ -642,7 +864,7 @@ export function AdminPanel() {
             <Button
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={() => grantAccessMutation.mutate()}
-              disabled={grantAccessMutation.isPending || !grantTargetUserId || !grantPluginId || (grantScopeType !== "GLOBAL" && !grantScopeId)}
+              disabled={grantAccessMutation.isPending || !grantTargetUserId || !grantPluginId || !grantRoleId || (grantScopeType !== "GLOBAL" && !grantScopeId)}
             >
               {grantAccessMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
               Conceder Acesso

@@ -43,4 +43,38 @@ export class AdminPluginsController {
   async remove(@Param('id') id: string) {
     return this.pluginsService.remove(id);
   }
+
+  // --- ACL Management ---
+
+  @Post('definitions')
+  @Roles(Role.PORTAL_ADMIN)
+  @ApiOperation({summary: 'Create a global or plugin-specific permission definition'})
+  async createDefinition(@Body() data: {pluginId?: string; name: string; label: string;}) {
+    return this.pluginsService.createPermissionDefinition(data);
+  }
+
+  @Get(':id/definitions')
+  @ApiOperation({summary: 'List available definitions for a plugin'})
+  async listDefinitions(@Param('id') id: string) {
+    return this.pluginsService.listPermissionDefinitions(id);
+  }
+
+  @Post(':id/roles')
+  @Roles(Role.PORTAL_ADMIN, Role.PLUGIN_MANAGER)
+  @ApiOperation({summary: 'Create a role for a plugin'})
+  async createRole(@Param('id') id: string, @Body() data: {name: string; description?: string; definitionIds: string[];}) {
+    return this.pluginsService.createRole({...data, pluginId: id});
+  }
+
+  @Get(':id/roles')
+  @ApiOperation({summary: 'List roles for a plugin'})
+  async listRoles(@Param('id') id: string) {
+    return this.pluginsService.listRoles(id);
+  }
+
+  @Get(':id/acl')
+  @ApiOperation({summary: 'Get full ACL structure for a plugin'})
+  async getAcl(@Param('id') id: string) {
+    return this.pluginsService.getPluginWithAcl(id);
+  }
 }

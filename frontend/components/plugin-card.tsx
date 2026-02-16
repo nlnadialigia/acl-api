@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/dialog";
 import {Label} from "@/components/ui/label";
 import {apiFetch} from "@/lib/api-client";
-import type {AccessRequest, Plugin, ScopeType} from "@/lib/types";
-import {useMutation, useQueryClient} from "@tanstack/react-query";
+import type {AccessRequest, Plugin, PluginRole, ScopeType} from "@/lib/types";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import * as LucideIcons from "lucide-react";
 import {Check, Clock, Crown, ExternalLink, Loader2} from "lucide-react";
 import {useState} from "react";
@@ -35,6 +35,13 @@ export function PluginCard({plugin, access, userId, onOpenPlugin}: PluginCardPro
   const [dialogOpen, setDialogOpen] = useState(false);
   const [scopeType, setScopeType] = useState<ScopeType>("GLOBAL");
   const [scopeId, setScopeId] = useState<string>("");
+  const [selectedRoleId, setSelectedRoleId] = useState<string>("");
+
+  const {data: roles} = useQuery<PluginRole[]>({
+    queryKey: ["plugin-roles", plugin.id],
+    queryFn: () => apiFetch(`/admin/plugins/${plugin.id}/roles`),
+    enabled: dialogOpen,
+  });
 
   const isApproved = access?.status === "APPROVED";
   const isPending = access?.status === "PENDING";
@@ -44,6 +51,7 @@ export function PluginCard({plugin, access, userId, onOpenPlugin}: PluginCardPro
       method: "POST",
       body: JSON.stringify({
         pluginId: plugin.id,
+        roleId: selectedRoleId,
         scopeType,
         scopeId: scopeType === "GLOBAL" ? undefined : scopeId,
       }),
@@ -140,6 +148,21 @@ export function PluginCard({plugin, access, userId, onOpenPlugin}: PluginCardPro
                   </div>
                 </div>
 
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="role-select" className="text-card-foreground text-sm font-medium">Papel (Role) Desejado</Label>
+                  <select
+                    id="role-select"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={selectedRoleId}
+                    onChange={(e) => setSelectedRoleId(e.target.value)}
+                  >
+                    <option value="">Selecione um papel...</option>
+                    {roles?.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {scopeType !== "GLOBAL" && (
                   <div className="flex flex-col gap-2">
                     <Label className="text-card-foreground text-sm font-medium">
@@ -161,7 +184,7 @@ export function PluginCard({plugin, access, userId, onOpenPlugin}: PluginCardPro
 
                 <Button
                   onClick={() => requestMutation.mutate()}
-                  disabled={requestMutation.isPending || (scopeType !== "GLOBAL" && !scopeId)}
+                  disabled={requestMutation.isPending || !selectedRoleId || (scopeType !== "GLOBAL" && !scopeId)}
                   className={`w-full ${plugin.isPublic ? "bg-blue-600 hover:bg-blue-700" : "bg-primary hover:bg-primary/90"} text-white`}
                 >
                   {requestMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

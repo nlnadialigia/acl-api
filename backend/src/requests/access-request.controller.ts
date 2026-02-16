@@ -20,14 +20,15 @@ export class AccessRequestController {
       type: 'object',
       properties: {
         pluginId: {type: 'string'},
+        roleId: {type: 'string'},
         scopeType: {enum: ['GLOBAL', 'UNIT', 'FACTORY']},
         scopeId: {type: 'string', nullable: true},
       },
-      required: ['pluginId', 'scopeType'],
+      required: ['pluginId', 'roleId', 'scopeType'],
     },
   })
-  async create(@Request() req, @Body() body: {pluginId: string; scopeType: ScopeType; scopeId?: string;}) {
-    return this.requestService.createRequest(req.user.userId, body.pluginId, body.scopeType, body.scopeId);
+  async create(@Request() req, @Body() body: {pluginId: string; scopeType: ScopeType; scopeId?: string; roleId: string;}) {
+    return this.requestService.createRequest(req.user.userId, body.pluginId, body.scopeType, body.scopeId, body.roleId);
   }
 
   @Get()
@@ -62,13 +63,14 @@ export class AccessRequestController {
       properties: {
         userId: {type: 'string'},
         pluginId: {type: 'string'},
+        roleId: {type: 'string'},
         scopeType: {enum: ['GLOBAL', 'UNIT', 'FACTORY']},
         scopeId: {type: 'string', nullable: true},
       },
-      required: ['userId', 'pluginId', 'scopeType'],
+      required: ['userId', 'pluginId', 'roleId', 'scopeType'],
     },
   })
-  async grant(@Request() req, @Body() body: {userId: string; pluginId: string; scopeType: ScopeType; scopeId?: string;}) {
+  async grant(@Request() req, @Body() body: {userId: string; pluginId: string; roleId: string; scopeType: ScopeType; scopeId?: string;}) {
     return this.requestService.grantAccess(body, req.user);
   }
 }
