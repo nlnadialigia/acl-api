@@ -60,6 +60,7 @@ export function AdminPanel() {
   const [editingPlugin, setEditingPlugin] = useState<Plugin | null>(null);
   const [pluginName, setPluginName] = useState("");
   const [pluginDescription, setPluginDescription] = useState("");
+  const [pluginIcon, setPluginIcon] = useState("");
   const [pluginIsPublic, setPluginIsPublic] = useState(false);
 
   // Queries
@@ -126,6 +127,7 @@ export function AdminPanel() {
         body: JSON.stringify({
           name: pluginName,
           description: pluginDescription,
+          icon: pluginIcon,
           isPublic: pluginIsPublic,
         }),
       });
@@ -136,6 +138,7 @@ export function AdminPanel() {
       setEditingPlugin(null);
       setPluginName("");
       setPluginDescription("");
+      setPluginIcon("");
       setPluginIsPublic(false);
     },
   });
@@ -144,6 +147,7 @@ export function AdminPanel() {
     setEditingPlugin(plugin);
     setPluginName(plugin.name);
     setPluginDescription(plugin.description || "");
+    setPluginIcon(plugin.icon || "");
     setPluginIsPublic(plugin.isPublic || false);
     setPluginDialogOpen(true);
   };
@@ -518,6 +522,16 @@ export function AdminPanel() {
                 value={pluginDescription}
                 onChange={(e) => setPluginDescription(e.target.value)}
                 placeholder="Uma breve descrição da funcionalidade..."
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="plugin-icon">Ícone (Nome Lucide)</Label>
+              <input
+                id="plugin-icon"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={pluginIcon}
+                onChange={(e) => setPluginIcon(e.target.value)}
+                placeholder="Ex: Package, Users, Settings (Default: Crown)"
               />
             </div>
             <div className="flex items-center space-x-2 py-2">

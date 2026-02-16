@@ -16,7 +16,8 @@ import {Label} from "@/components/ui/label";
 import {apiFetch} from "@/lib/api-client";
 import type {AccessRequest, Plugin, ScopeType} from "@/lib/types";
 import {useMutation, useQueryClient} from "@tanstack/react-query";
-import {Check, Clock, ExternalLink, Loader2, Shield} from "lucide-react";
+import * as LucideIcons from "lucide-react";
+import {Check, Clock, Crown, ExternalLink, Loader2} from "lucide-react";
 import {useState} from "react";
 
 const AVAILABLE_UNITS = ["Unidade SP", "Unidade RJ", "Unidade MG"];
@@ -63,12 +64,14 @@ export function PluginCard({plugin, access, userId, onOpenPlugin}: PluginCardPro
     return `${access.scopeType}: ${access.scopeId}`;
   }
 
+  const IconComponent = (plugin.icon && (LucideIcons as any)[plugin.icon]) || Crown;
+
   return (
     <Card className="group relative flex flex-col border-border bg-card transition-all hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
-            <Shield className="h-5 w-5 text-primary" />
+            <IconComponent className="h-5 w-5 text-primary" />
           </div>
           {isApproved && (
             <Badge className="bg-emerald-600/20 text-emerald-400 border-emerald-600/30">

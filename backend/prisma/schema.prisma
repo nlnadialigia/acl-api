@@ -55,6 +55,7 @@ model Plugin {
   id          String   @id @default(uuid())
   name        String   @unique
   description String?
+  icon        String?
   isActive    Boolean  @default(true)
   isPublic    Boolean  @default(false)
   createdAt   DateTime @default(now())

@@ -22,13 +22,13 @@ export class AdminPluginsController {
 
   @Post()
   @ApiOperation({summary: 'Create a new plugin'})
-  async create(@Body() data: {name: string; description?: string; isPublic?: boolean;}) {
+  async create(@Body() data: {name: string; description?: string; icon?: string; isPublic?: boolean;}) {
     return this.pluginsService.create(data);
   }
 
   @Patch(':id')
   @ApiOperation({summary: 'Update a plugin'})
-  async update(@Param('id') id: string, @Body() data: {name?: string; description?: string; isActive?: boolean; isPublic?: boolean;}) {
+  async update(@Param('id') id: string, @Body() data: {name?: string; description?: string; icon?: string; isActive?: boolean; isPublic?: boolean;}) {
     return this.pluginsService.update(id, data);
   }
 

@@ -28,17 +28,24 @@ Este documento descreve como testar o fluxo completo da API de ACL, incluindo a 
 
 ---
 
+---
+
 ## 📂 1. Fluxo de Usuário (Cadastro e Login)
 
-1.  **Swagger**: Acesse `http://localhost:5001/api` para ver todos os endpoints e modelos.
-2.  **Variáveis Postman**: Recomenda-se criar um Environment com:
+### 💡 Dica: Importar Swagger no Postman
+Para facilitar os testes, você pode importar toda a especificação da API de uma vez:
+1. No Postman, clique em **Import**.
+2. Na aba **Link**, cole a URL: `http://localhost:5001/api-json`.
+3. Siga as instruções de importação. Isso criará uma Collection com todas as rotas e tipos de dados.
+
+### Preparação Manual
+1.  **Swagger UI**: Acesse `http://localhost:5001/api` para ver a documentação visual.
+2.  **Variáveis Postman**: Crie um Environment com:
     *   `baseUrl`: `http://localhost:5001`
     *   `token_user`: (JWT do usuário comum)
     *   `token_admin`: (JWT do Portal Admin)
 
 ---
-
-## 📂 1. Fluxo de Usuário (Cadastro e Login)
 
 ### Cadastro
 *   **POST** `/users/register`
