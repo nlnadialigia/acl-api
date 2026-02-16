@@ -4,9 +4,9 @@ Este documento descreve como testar o fluxo completo da API de ACL, desde o cada
 
 ## 🚀 Preparação
 
-1.  **Swagger**: Acesse `http://localhost:3000/api` para ver todos os endpoints e modelos.
+1.  **Swagger**: Acesse `http://localhost:5001/api` para ver todos os endpoints e modelos.
 2.  **Variáveis Postman**: Recomenda-se criar um Environment com:
-    *   `baseUrl`: `http://localhost:3000`
+    *   `baseUrl`: `http://localhost:5001`
     *   `token_user`: (JWT do usuário comum)
     *   `token_admin`: (JWT do Portal Admin)
 
