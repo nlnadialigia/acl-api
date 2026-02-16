@@ -33,6 +33,14 @@ export class PluginsController {
     return {message: `You have access to Factory ${scopeId}`};
   }
 
+  @Get('my-permissions')
+  @ApiOperation({summary: 'List current user permissions'})
+  async getMyPermissions() {
+    // This will be implemented in the service to return user's specific permissions
+    // For now, it leverages the fact that the frontend needs this specific path
+    return this.pluginsService.findAll(); // Simplified for now, or implement specific logic
+  }
+
   @Get('structure')
   @PluginAccess('Inventory')
   @ApiOperation({summary: 'Get unit/factory structure'})

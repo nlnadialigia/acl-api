@@ -28,6 +28,7 @@ import {
   Check,
   ClipboardList,
   Loader2,
+  Puzzle,
   UserPlus,
   Users,
   X
@@ -54,6 +55,12 @@ export function AdminPanel() {
   const [grantScopeType, setGrantScopeType] = useState<ScopeType>("GLOBAL");
   const [grantScopeId, setGrantScopeId] = useState<string>("");
 
+  // Plugin management dialog
+  const [pluginDialogOpen, setPluginDialogOpen] = useState(false);
+  const [editingPlugin, setEditingPlugin] = useState<Plugin | null>(null);
+  const [pluginName, setPluginName] = useState("");
+  const [pluginDescription, setPluginDescription] = useState("");
+
   // Queries
   const {data: pendingRequests, isLoading: requestsLoading} = useQuery<AccessRequest[]>({
     queryKey: ["pending-requests"],
@@ -69,8 +76,9 @@ export function AdminPanel() {
   });
 
   const {data: plugins} = useQuery<Plugin[]>({
-    queryKey: ["plugins"],
-    queryFn: () => apiFetch("/plugins"),
+    queryKey: ["plugins-admin"],
+    queryFn: () => apiFetch("/admin/plugins"),
+    enabled: isAdmin,
   });
 
   // Mutations
@@ -105,6 +113,39 @@ export function AdminPanel() {
     onSuccess: () => {
       queryClient.invalidateQueries({queryKey: ["accesses"]});
       setGrantDialogOpen(false);
+    },
+  });
+
+  const pluginMutation = useMutation({
+    mutationFn: async () => {
+      const endpoint = editingPlugin ? `/admin/plugins/${editingPlugin.id}` : "/admin/plugins";
+      const method = editingPlugin ? "PATCH" : "POST";
+      return apiFetch(endpoint, {
+        method,
+        body: JSON.stringify({
+          name: pluginName,
+          description: pluginDescription,
+        }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["plugins-admin"]});
+      setPluginDialogOpen(false);
+      setEditingPlugin(null);
+      setPluginName("");
+      setPluginDescription("");
+    },
+  });
+
+  const togglePluginStatusMutation = useMutation({
+    mutationFn: async ({id, isActive}: {id: string; isActive: boolean;}) => {
+      return apiFetch(`/admin/plugins/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({isActive}),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["plugins-admin"]});
     },
   });
 
@@ -154,6 +195,12 @@ export function AdminPanel() {
             <TabsTrigger value="users" className="gap-2">
               <Users className="h-4 w-4" />
               <span className="hidden sm:inline">Usuarios</span>
+            </TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger value="plugins" className="gap-2">
+              <Puzzle className="h-4 w-4" />
+              <span className="hidden sm:inline">Plugins</span>
             </TabsTrigger>
           )}
         </TabsList>
@@ -265,6 +312,87 @@ export function AdminPanel() {
             </Card>
           </TabsContent>
         )}
+
+        {isAdmin && (
+          <TabsContent value="plugins" className="mt-4">
+            <Card className="border-border bg-card">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-card-foreground">
+                    <Puzzle className="h-5 w-5 text-primary" />
+                    Gerenciamento de Plugins
+                  </CardTitle>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingPlugin(null);
+                    setPluginName("");
+                    setPluginDescription("");
+                    setPluginDialogOpen(true);
+                  }}
+                  className="bg-primary text-primary-foreground"
+                >
+                  <Puzzle className="mr-2 h-4 w-4" />
+                  Novo Plugin
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-border">
+                        <TableHead className="text-muted-foreground">Nome</TableHead>
+                        <TableHead className="text-muted-foreground">Descrição</TableHead>
+                        <TableHead className="text-muted-foreground">Status</TableHead>
+                        <TableHead className="text-right text-muted-foreground">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {plugins?.map((plugin) => (
+                        <TableRow key={plugin.id} className="border-border">
+                          <TableCell className="font-medium text-card-foreground">{plugin.name}</TableCell>
+                          <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">
+                            {plugin.description || "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={plugin.isActive ? "default" : "secondary"} className={plugin.isActive ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" : "bg-muted text-muted-foreground"}>
+                              {plugin.isActive ? "Ativo" : "Inativo"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setEditingPlugin(plugin);
+                                  setPluginName(plugin.name);
+                                  setPluginDescription(plugin.description || "");
+                                  setPluginDialogOpen(true);
+                                }}
+                              >
+                                Editar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={plugin.isActive ? "destructive" : "default"}
+                                className={!plugin.isActive ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                                onClick={() => togglePluginStatusMutation.mutate({id: plugin.id, isActive: !plugin.isActive})}
+                              >
+                                {plugin.isActive ? "Desativar" : "Ativar"}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* APPROVE DIALOG */}
@@ -332,6 +460,47 @@ export function AdminPanel() {
               </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* PLUGIN DIALOG */}
+      <Dialog open={pluginDialogOpen} onOpenChange={setPluginDialogOpen}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-card-foreground">
+              {editingPlugin ? "Editar Plugin" : "Novo Plugin"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="plugin-name">Nome do Plugin</Label>
+              <input
+                id="plugin-name"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={pluginName}
+                onChange={(e) => setPluginName(e.target.value)}
+                placeholder="Ex: Inventory, CRM, etc."
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="plugin-desc">Descrição</Label>
+              <textarea
+                id="plugin-desc"
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={pluginDescription}
+                onChange={(e) => setPluginDescription(e.target.value)}
+                placeholder="Uma breve descrição da funcionalidade..."
+              />
+            </div>
+            <Button
+              className="w-full"
+              onClick={() => pluginMutation.mutate()}
+              disabled={pluginMutation.isPending || !pluginName}
+            >
+              {pluginMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+              {editingPlugin ? "Salvar Alterações" : "Criar Plugin"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

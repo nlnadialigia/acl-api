@@ -1,8 +1,34 @@
 # Guia de Teste - Postman
 
-Este documento descreve como testar o fluxo completo da API de ACL, desde o cadastro até a aprovação e acesso a plugins.
+Este documento descreve como testar o fluxo completo da API de ACL, incluindo a nova gestão de plugins.
 
-## 🚀 Preparação
+---
+
+## 📂 0. Gestão de Plugins (Admin)
+
+### Listar Todos os Plugins (Painel Admin)
+*   **GET** `/admin/plugins`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+
+### Criar Novo Plugin
+*   **POST** `/admin/plugins`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+*   **Body**:
+    ```json
+    {
+      "name": "Inventory",
+      "description": "Gestão de estoque e logística"
+    }
+    ```
+
+### Atualizar/Desativar Plugin
+*   **PATCH** `/admin/plugins/{{pluginId}}`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+*   **Body**: `{"isActive": false}` ou `{"description": "Nova descrição"}`
+
+---
+
+## 📂 1. Fluxo de Usuário (Cadastro e Login)
 
 1.  **Swagger**: Acesse `http://localhost:5001/api` para ver todos os endpoints e modelos.
 2.  **Variáveis Postman**: Recomenda-se criar um Environment com:
