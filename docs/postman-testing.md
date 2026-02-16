@@ -66,6 +66,14 @@ Este documento descreve como testar o fluxo completo da API de ACL, incluindo a 
 *   **GET** `/admin/plugins/{{pluginId}}/acl`
 *   **Headers**: `Authorization: Bearer {{token_admin}}`
 
+### Excluir Papel (Role)
+*   **DELETE** `/admin/plugins/roles/{{roleId}}`
+*   **Headers**: `Authorization: Bearer {{token_admin}}` (ou token_manager)
+
+### Excluir Definição de Permissão
+*   **DELETE** `/admin/plugins/definitions/{{definitionId}}`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+
 ---
 
 ---
@@ -152,6 +160,11 @@ Para facilitar os testes, você pode importar toda a especificação da API de u
 *   **GET** `/plugins`
 *   **Headers**: `Authorization: Bearer {{token_user}}`
 *   **Comportamento**: A primeira chamada busca no banco e salva no Redis. A segunda chamada vem direto do Redis.
+
+### Listar Minhas Permissões e Solicitações
+*   **GET** `/plugins/my-permissions`
+*   **Headers**: `Authorization: Bearer {{token_user}}`
+*   **Uso**: O dashboard usa isso para mostrar quais plugins já estão aprovados ou pendentes.
 
 ---
 

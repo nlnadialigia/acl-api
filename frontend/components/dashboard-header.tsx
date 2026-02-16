@@ -1,16 +1,17 @@
-"use client"
+"use client";
 
-import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { NotificationBell } from "@/components/notification-bell"
-import { Shield, LogOut, Settings, Mail } from "lucide-react"
+import {NotificationBell} from "@/components/notification-bell";
+import {Badge} from "@/components/ui/badge";
+import {Button} from "@/components/ui/button";
+import {useAuth} from "@/lib/auth-context";
+import {LogOut, Mail, Settings, Shield} from "lucide-react";
 
 interface DashboardHeaderProps {
-  onShowAdmin: () => void
-  onShowEmails: () => void
-  showAdmin: boolean
-  showEmails: boolean
+  onShowAdmin: () => void;
+  onShowEmails: () => void;
+  showAdmin: boolean;
+  showEmails: boolean;
+  canSeeAdmin?: boolean;
 }
 
 export function DashboardHeader({
@@ -18,12 +19,13 @@ export function DashboardHeader({
   onShowEmails,
   showAdmin,
   showEmails,
+  canSeeAdmin,
 }: DashboardHeaderProps) {
-  const { session, logout } = useAuth()
+  const {session, logout} = useAuth();
 
-  if (!session) return null
+  if (!session) return null;
 
-  const isPrivileged = session.role === "admin" || session.role === "manager"
+  const isPrivileged = canSeeAdmin ?? (session.role === "PORTAL_ADMIN" || session.role === "PLUGIN_MANAGER");
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
@@ -100,5 +102,5 @@ export function DashboardHeader({
         </div>
       </div>
     </header>
-  )
+  );
 }

@@ -18,11 +18,26 @@ export class AccessRequestService {
 
   async createRequest(userId: string, pluginId: string, scopeType: ScopeType, scopeId?: string, roleId?: string) {
     // Check if plugin exists
-    const plugin = await this.prisma.plugin.findUnique({where: {id: pluginId}});
+    const plugin = await this.prisma.plugin.findUnique({
+      where: {id: pluginId},
+      include: {roleDefinitions: {take: 1, orderBy: {name: 'asc'}}},
+    });
     if (!plugin) throw new NotFoundException('Plugin not found');
 
-    // If roleId is not provided, we need a default role or throw error
-    if (!roleId) throw new BadRequestException('Role must be specified');
+    let effectiveRoleId = roleId;
+
+    // If roleId is missing, check if it's public and pick a default
+    if (!effectiveRoleId) {
+      if (!plugin.isPublic) {
+        throw new BadRequestException('Role must be specified for private plugins');
+      }
+
+      const defaultRole = plugin.roleDefinitions[0];
+      if (!defaultRole) {
+        throw new BadRequestException('This plugin has no roles defined. Contact administrator.');
+      }
+      effectiveRoleId = defaultRole.id;
+    }
 
     // Check for existing pending request for this specific scope/role combination
     // Note: The unique constraint is [userId, pluginId, scopeType, scopeId], but for requests we might allow multiple roles to be pending?
@@ -39,7 +54,7 @@ export class AccessRequestService {
           data: {
             userId,
             pluginId,
-            roleId,
+            roleId: effectiveRoleId!,
             scopeType,
             scopeId,
             status: RequestStatus.APPROVED,
@@ -48,29 +63,28 @@ export class AccessRequestService {
           include: {user: true, role: true},
         });
 
-        // 2. Create/Update Permission
-        await tx.pluginPermission.upsert({
+        // 2. Create Permission only if not exists
+        const existingPermission = await tx.pluginPermission.findFirst({
           where: {
-            userId_pluginId_scopeType_scopeId: {
-              userId,
-              pluginId,
-              scopeType,
-              scopeId: scopeId ?? null,
-            }
-          } as any,
-          update: {
-            status: PermissionStatus.ACTIVE,
-            roleId,
-          },
-          create: {
             userId,
             pluginId,
-            roleId,
             scopeType,
             scopeId: scopeId ?? null,
-            status: PermissionStatus.ACTIVE,
           },
         });
+
+        if (!existingPermission) {
+          await tx.pluginPermission.create({
+            data: {
+              userId,
+              pluginId,
+              roleId: effectiveRoleId!,
+              scopeType,
+              scopeId: scopeId ?? null,
+              status: PermissionStatus.ACTIVE,
+            },
+          });
+        }
 
         // 3. Audit Log
         await this.audit.log({
@@ -99,7 +113,7 @@ export class AccessRequestService {
       data: {
         userId,
         pluginId,
-        roleId,
+        roleId: effectiveRoleId!,
         scopeType,
         scopeId,
         status: RequestStatus.PENDING,
@@ -129,6 +143,14 @@ export class AccessRequestService {
     });
   }
 
+  async listUserAccess(userId: string) {
+    return this.prisma.accessRequest.findMany({
+      where: {userId},
+      include: {plugin: true, role: true},
+      orderBy: {requestedAt: 'desc'},
+    });
+  }
+
   async approveRequest(requestId: string, actorId: string) {
     const request = await this.prisma.accessRequest.findUnique({
       where: {id: requestId},
@@ -147,29 +169,28 @@ export class AccessRequestService {
         include: {role: true},
       });
 
-      // 2. Create Permission
-      await tx.pluginPermission.upsert({
+      // 2. Create Permission only if not exists
+      const existingPermission = await tx.pluginPermission.findFirst({
         where: {
-          userId_pluginId_scopeType_scopeId: {
-            userId: request.userId,
-            pluginId: request.pluginId,
-            scopeType: request.scopeType,
-            scopeId: request.scopeId ?? null,
-          }
-        } as any,
-        update: {
-          status: PermissionStatus.ACTIVE,
-          roleId: request.roleId,
-        },
-        create: {
           userId: request.userId,
           pluginId: request.pluginId,
-          roleId: request.roleId,
           scopeType: request.scopeType,
           scopeId: request.scopeId ?? null,
-          status: PermissionStatus.ACTIVE,
         },
       });
+
+      if (!existingPermission) {
+        await tx.pluginPermission.create({
+          data: {
+            userId: request.userId,
+            pluginId: request.pluginId,
+            roleId: request.roleId,
+            scopeType: request.scopeType,
+            scopeId: request.scopeId ?? null,
+            status: PermissionStatus.ACTIVE,
+          },
+        });
+      }
 
       // 3. Audit Log
       await this.audit.log({
@@ -287,30 +308,30 @@ export class AccessRequestService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Upsert Permission
-      const permission = await tx.pluginPermission.upsert({
+      // 1. Create Permission only if not exists
+      let permission = await tx.pluginPermission.findFirst({
         where: {
-          userId_pluginId_scopeType_scopeId: {
-            userId: data.userId,
-            pluginId: data.pluginId,
-            scopeType: data.scopeType,
-            scopeId: data.scopeId ?? null,
-          }
-        } as any,
-        update: {
-          status: PermissionStatus.ACTIVE,
-          roleId: data.roleId,
-        },
-        create: {
           userId: data.userId,
           pluginId: data.pluginId,
-          roleId: data.roleId,
           scopeType: data.scopeType,
           scopeId: data.scopeId ?? null,
-          status: PermissionStatus.ACTIVE,
         },
         include: {user: true, role: true},
       });
+
+      if (!permission) {
+        permission = await tx.pluginPermission.create({
+          data: {
+            userId: data.userId,
+            pluginId: data.pluginId,
+            roleId: data.roleId,
+            scopeType: data.scopeType,
+            scopeId: data.scopeId ?? null,
+            status: PermissionStatus.ACTIVE,
+          },
+          include: {user: true, role: true},
+        });
+      }
 
       // 2. Audit Log
       await this.audit.log({

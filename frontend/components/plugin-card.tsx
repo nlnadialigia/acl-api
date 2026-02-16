@@ -112,11 +112,25 @@ export function PluginCard({plugin, access, userId, onOpenPlugin}: PluginCardPro
             <Clock className="mr-2 h-4 w-4" />
             Solicitacao Pendente
           </Button>
+        ) : plugin.isPublic ? (
+          <Button
+            size="sm"
+            className="w-full bg-primary hover:bg-primary/90 text-white"
+            onClick={() => requestMutation.mutate()}
+            disabled={requestMutation.isPending}
+          >
+            {requestMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <ExternalLink className="mr-2 h-4 w-4" />
+            )}
+            Solicitar Acesso
+          </Button>
         ) : (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className={`w-full ${plugin.isPublic ? "bg-blue-600 hover:bg-blue-700" : "bg-primary hover:bg-primary/90"} text-white`}>
-                {plugin.isPublic ? "Ativar Acesso" : "Solicitar Acesso"}
+              <Button size="sm" className="w-full bg-primary hover:bg-primary/90 text-white">
+                Solicitar Acesso
               </Button>
             </DialogTrigger>
             <DialogContent className="bg-card border-border">

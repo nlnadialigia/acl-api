@@ -16,16 +16,48 @@ export class PluginsService {
   }
 
   async create(data: {name: string; description?: string; icon?: string; isActive?: boolean; isPublic?: boolean;}) {
-    return this.prisma.plugin.create({
-      data,
+    return this.prisma.$transaction(async (tx) => {
+      const plugin = await tx.plugin.create({
+        data,
+      });
+
+      if (data.isPublic) {
+        await tx.pluginRole.create({
+          data: {
+            pluginId: plugin.id,
+            name: "Public Access",
+            description: "Default role for public access",
+          }
+        });
+      }
+
+      return plugin;
     });
   }
 
   async update(id: string, data: {name?: string; description?: string; icon?: string; isActive?: boolean; isPublic?: boolean;}) {
-    return this.prisma.plugin.update({
+    const plugin = await this.prisma.plugin.update({
       where: {id},
       data,
     });
+
+    if (data.isPublic) {
+      const rolesCount = await this.prisma.pluginRole.count({
+        where: {pluginId: id}
+      });
+
+      if (rolesCount === 0) {
+        await this.prisma.pluginRole.create({
+          data: {
+            pluginId: id,
+            name: "Public Access",
+            description: "Default role for public access",
+          }
+        });
+      }
+    }
+
+    return plugin;
   }
 
   async remove(id: string) {
@@ -59,10 +91,18 @@ export class PluginsService {
     return managers.map((m) => m.plugin);
   }
 
-  // Helper to fetch unit/factory details for testing
+  // Helper to fetch unit/factory structure
   async getUnitStructure() {
     return this.prisma.unit.findMany({
       include: {factories: true},
+    });
+  }
+
+  async listUserAccess(userId: string) {
+    return this.prisma.accessRequest.findMany({
+      where: {userId},
+      include: {plugin: true, role: true},
+      orderBy: {requestedAt: 'desc'},
     });
   }
 
@@ -115,6 +155,30 @@ export class PluginsService {
         },
         availableDefinitions: true,
       },
+    });
+  }
+
+  async deleteRole(id: string) {
+    // Check if role is in use
+    const inUse = await this.prisma.pluginPermission.count({where: {roleId: id}});
+    const requestsInUse = await this.prisma.accessRequest.count({where: {roleId: id}});
+
+    if (inUse > 0 || requestsInUse > 0) {
+      throw new Error('Cannot delete role that is currently in use by users or has pending requests');
+    }
+
+    return this.prisma.pluginRole.delete({
+      where: {id},
+    });
+  }
+
+  async deletePermissionDefinition(id: string) {
+    // Implicit many-to-many relations are handled by Prisma (disconnects automatically)
+    // but we can't delete if it's the "last" definition required by a role? 
+    // Usually it's fine to delete the definition and it just vanishes from roles.
+
+    return this.prisma.pluginPermissionDefinition.delete({
+      where: {id},
     });
   }
 }

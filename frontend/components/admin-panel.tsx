@@ -29,6 +29,7 @@ import {
   ClipboardList,
   Loader2,
   Puzzle,
+  Trash2,
   UserPlus,
   Users,
   X
@@ -41,6 +42,7 @@ const AVAILABLE_FACTORIES = ["Fabrica Norte", "Fabrica Sul"];
 export function AdminPanel() {
   const {session} = useAuth();
   const queryClient = useQueryClient();
+  const isAdmin = session?.role === "PORTAL_ADMIN";
 
   // Resolve dialog
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
@@ -174,6 +176,23 @@ export function AdminPanel() {
     },
   });
 
+  const deleteDefMutation = useMutation({
+    mutationFn: (id: string) => apiFetch(`/admin/plugins/definitions/${id}`, {method: "DELETE"}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["definitions"]});
+    },
+  });
+
+  const deleteRoleMutation = useMutation({
+    mutationFn: (id: string) => apiFetch(`/admin/plugins/roles/${id}`, {method: "DELETE"}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["roles"]});
+    },
+    onError: (err: any) => {
+      alert(err.message || "Erro ao excluir papel. Verifique se existem permissões ativas vinculadas a ele.");
+    }
+  });
+
   const {data: allDefinitions} = useQuery<PluginPermissionDefinition[]>({
     queryKey: ["definitions", selectedAclPluginId],
     queryFn: () => apiFetch(`/admin/plugins/${selectedAclPluginId || 'global'}/definitions`),
@@ -225,9 +244,8 @@ export function AdminPanel() {
     },
   });
 
-  if (!session) return null;
 
-  const isAdmin = session.role === "PORTAL_ADMIN";
+  if (!session) return null;
 
   function openResolveDialog(request: AccessRequest) {
     setSelectedRequest(request);
@@ -545,7 +563,23 @@ export function AdminPanel() {
                         <span className="font-bold">{def.label}</span>
                         <code className="text-[10px] text-muted-foreground">{def.name}</code>
                       </div>
-                      {!def.pluginId && <Badge variant="outline" className="text-[10px]">Global</Badge>}
+                      <div className="flex items-center gap-2">
+                        {!def.pluginId && <Badge variant="outline" className="text-[10px]">Global</Badge>}
+                        {isAdmin && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={() => {
+                              if (confirm("Deseja realmente excluir esta definição?")) {
+                                deleteDefMutation.mutate(def.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -611,7 +645,21 @@ export function AdminPanel() {
                         <div key={role.id} className="p-3 border rounded-lg bg-card">
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-bold text-sm text-primary">{role.name}</span>
-                            <Badge variant="secondary" className="text-[10px]">{role.definitions?.length || 0} permissões</Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-[10px]">{role.definitions?.length || 0} permissões</Badge>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                onClick={() => {
+                                  if (confirm("Deseja realmente excluir este papel?")) {
+                                    deleteRoleMutation.mutate(role.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                           <div className="flex flex-wrap gap-1">
                             {role.definitions?.map(def => (

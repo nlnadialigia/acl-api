@@ -35,7 +35,7 @@ export class PluginAccessGuard implements CanActivate {
       return true;
     }
 
-    const requestedScopeId = request.params.scopeId || request.query.scopeId || request.body.scopeId;
+    const requestedScopeId = request.params?.scopeId || request.query?.scopeId || request.body?.scopeId;
 
     // Try Cache First
     let permissions = await this.cache.getPermissions(user.userId, options.pluginName);

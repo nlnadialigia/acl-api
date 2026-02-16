@@ -26,8 +26,13 @@ export function Dashboard() {
   // Permissões diretas do backend (AccessRequests resolvidos)
   const {data: accesses} = useQuery<AccessRequest[]>({
     queryKey: ["accesses", session?.userId],
-    queryFn: () => apiFetch(`/plugins/my-permissions`), // Assumindo este endpoint ou similar
+    queryFn: () => apiFetch(`/plugins/my-permissions`),
     enabled: !!session?.userId,
+    // Polling inteligente: Só atualiza se houver pelo menos uma solicitação pendente
+    refetchInterval: (query) => {
+      const hasPending = query.state.data?.some(a => a.status === "PENDING");
+      return hasPending ? 30000 : false;
+    },
   });
 
   if (!session) return null;

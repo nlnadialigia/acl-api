@@ -1,4 +1,4 @@
-import {Controller, Get, Param, UseGuards} from '@nestjs/common';
+import {Controller, Get, Param, Request, UseGuards} from '@nestjs/common';
 import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
 import {PluginAccess} from '../auth/decorators/plugin-access.decorator';
 import {JwtAuthGuard} from '../auth/guards/jwt-auth.guard';
@@ -13,8 +13,7 @@ export class PluginsController {
   constructor(private readonly pluginsService: PluginsService) { }
 
   @Get()
-  @PluginAccess('Inventory') // Generic check
-  @ApiOperation({summary: 'List all active plugins (Requires Inventory access)'})
+  @ApiOperation({summary: 'List all active plugins'})
   async list() {
     return this.pluginsService.findAll();
   }
@@ -35,10 +34,8 @@ export class PluginsController {
 
   @Get('my-permissions')
   @ApiOperation({summary: 'List current user permissions'})
-  async getMyPermissions() {
-    // This will be implemented in the service to return user's specific permissions
-    // For now, it leverages the fact that the frontend needs this specific path
-    return this.pluginsService.findAll(); // Simplified for now, or implement specific logic
+  async getMyPermissions(@Request() req: any) {
+    return this.pluginsService.listUserAccess(req.user.userId);
   }
 
   @Get('structure')

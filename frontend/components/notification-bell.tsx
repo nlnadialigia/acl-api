@@ -26,7 +26,7 @@ export function NotificationBell() {
     queryKey: ["notifications", session?.userId],
     queryFn: () => apiFetch(`/notifications?userId=${session?.userId}`),
     enabled: !!session?.userId,
-    refetchInterval: 5000,
+    refetchInterval: 30000, // Cada 30 segundos é suficiente para notificações
   });
 
   const markAllMutation = useMutation({
@@ -128,8 +128,8 @@ export function NotificationBell() {
                   <div className="flex-1">
                     <p
                       className={`text-xs leading-relaxed ${!notif.read
-                          ? "font-medium text-card-foreground"
-                          : "text-muted-foreground"
+                        ? "font-medium text-card-foreground"
+                        : "text-muted-foreground"
                         }`}
                     >
                       {notif.message}

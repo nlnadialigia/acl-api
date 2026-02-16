@@ -77,4 +77,18 @@ export class AdminPluginsController {
   async getAcl(@Param('id') id: string) {
     return this.pluginsService.getPluginWithAcl(id);
   }
+
+  @Delete('roles/:id')
+  @Roles(Role.PORTAL_ADMIN, Role.PLUGIN_MANAGER)
+  @ApiOperation({summary: 'Delete a role'})
+  async deleteRole(@Param('id') id: string) {
+    return this.pluginsService.deleteRole(id);
+  }
+
+  @Delete('definitions/:id')
+  @Roles(Role.PORTAL_ADMIN)
+  @ApiOperation({summary: 'Delete a permission definition'})
+  async deleteDefinition(@Param('id') id: string) {
+    return this.pluginsService.deletePermissionDefinition(id);
+  }
 }
