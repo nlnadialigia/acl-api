@@ -1,4 +1,4 @@
-import {Injectable, NotFoundException} from '@nestjs/common';
+import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
 import {PrismaService} from '../prisma/prisma.service';
 
 @Injectable()
@@ -6,7 +6,9 @@ export class PluginsService {
   constructor(private prisma: PrismaService) { }
 
   async findAllAdmin() {
-    return this.prisma.plugin.findMany();
+    return this.prisma.plugin.findMany({
+      orderBy: {name: 'asc'}
+    });
   }
 
   async create(data: {name: string; description?: string; icon?: string; isActive?: boolean; isPublic?: boolean;}) {
@@ -85,7 +87,8 @@ export class PluginsService {
       where: {isActive: true},
       include: {
         userPluginFavorites: true
-      }
+      },
+      orderBy: {name: 'asc'}
     });
   }
 
@@ -173,6 +176,22 @@ export class PluginsService {
   }
 
   async createRole(data: {pluginId: string, name: string, description?: string, definitionIds: string[];}) {
+    // Verificar se já existe role com as mesmas permissões
+    const existingRoles = await this.prisma.pluginRole.findMany({
+      where: {pluginId: data.pluginId},
+      include: {definitions: true},
+    });
+
+    const sortedNewDefs = [...data.definitionIds].sort();
+    
+    for (const role of existingRoles) {
+      const sortedExistingDefs = role.definitions.map(d => d.id).sort();
+      if (JSON.stringify(sortedExistingDefs) === JSON.stringify(sortedNewDefs)) {
+        const permissionNames = role.definitions.map(d => d.label).join(', ');
+        throw new BadRequestException(`Já existe uma role com essas permissões: ${permissionNames}`);
+      }
+    }
+
     return this.prisma.pluginRole.create({
       data: {
         pluginId: data.pluginId,

@@ -1,32 +1,33 @@
 "use client";
 
-import {AdminPanel} from "@/components/admin-panel";
-import {DashboardHeader} from "@/components/dashboard-header";
-import {EmailLogViewer} from "@/components/email-log-viewer";
-import {PluginCard} from "@/components/plugin-card";
-import {PluginPage} from "@/components/plugin-page";
-import {apiFetch} from "@/lib/api-client";
-import {useAuth} from "@/lib/auth-context";
-import type {AccessRequest, Plugin} from "@/lib/types";
-import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import {Loader2} from "lucide-react";
-import {useState} from "react";
+import { AdminPanel } from "@/components/admin-panel";
+import { DashboardHeader } from "@/components/dashboard-header";
+import { EmailLogViewer } from "@/components/email-log-viewer";
+import { PluginCard } from "@/components/plugin-card";
+import { PluginPage } from "@/components/plugin-page";
+import { apiFetch } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
+import type { AccessRequest, Plugin } from "@/lib/types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Grid, Loader2, Star } from "lucide-react";
+import { useState } from "react";
 
 export function Dashboard() {
-  const {session} = useAuth();
+  const { session } = useAuth();
   const queryClient = useQueryClient();
   const [showAdmin, setShowAdmin] = useState(false);
   const [showEmails, setShowEmails] = useState(false);
   const [activePluginId, setActivePluginId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("all");
 
-  const {data: plugins, isLoading: pluginsLoading} = useQuery<Plugin[]>({
+  const { data: plugins, isLoading: pluginsLoading } = useQuery<Plugin[]>({
     queryKey: ["plugins"],
     queryFn: () => apiFetch("/plugins"),
   });
 
   // Permissões diretas do backend (AccessRequests resolvidos)
-  const {data: accesses} = useQuery<AccessRequest[]>({
+  const { data: accesses } = useQuery<AccessRequest[]>({
     queryKey: ["accesses", session?.userId],
     queryFn: () => apiFetch(`/plugins/my-permissions`),
     enabled: !!session?.userId,
@@ -38,9 +39,9 @@ export function Dashboard() {
   });
 
   const toggleFavoriteMutation = useMutation({
-    mutationFn: (pluginId: string) => apiFetch(`/plugins/${pluginId}/favorite`, {method: "POST"}),
+    mutationFn: (pluginId: string) => apiFetch(`/plugins/${pluginId}/favorite`, { method: "POST" }),
     onSuccess: () => {
-      queryClient.invalidateQueries({queryKey: ["plugins"]});
+      queryClient.invalidateQueries({ queryKey: ["plugins"] });
     },
   });
 
@@ -92,27 +93,13 @@ export function Dashboard() {
           <EmailLogViewer />
         ) : (
           <>
-            <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground text-balance">
-                  Portal de Plugins
-                </h2>
-                <p className="mt-1 text-muted-foreground">
-                  Gerencie seus acessos e ferramentas em um só lugar
-                </p>
-              </div>
-
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
-                <TabsList className="bg-muted/50 border border-border">
-                  <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                    Todos
-                  </TabsTrigger>
-                  <TabsTrigger value="favorites" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex gap-2">
-                    <Star className={`h-3.5 w-3.5 ${activeTab === 'favorites' ? 'fill-current' : 'text-muted-foreground'}`} />
-                    Favoritos
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-foreground text-balance">
+                Portal de Plugins
+              </h2>
+              <p className="mt-1 text-muted-foreground">
+                Gerencie seus acessos e ferramentas em um só lugar
+              </p>
             </div>
 
             {pluginsLoading ? (
@@ -120,8 +107,19 @@ export function Dashboard() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <Tabs value={activeTab} className="mt-0">
-                <TabsContent value="all" className="mt-0">
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="mb-6">
+                  <TabsTrigger value="all" className="flex gap-2">
+                    <Grid className="h-3.5 w-3.5" />
+                    Todos
+                  </TabsTrigger>
+                  <TabsTrigger value="favorites" className="flex gap-2">
+                    <Star className={`h-3.5 w-3.5 ${activeTab === 'favorites' ? 'fill-current' : ''}`} />
+                    Favoritos
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="all">
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {plugins?.map((plugin) => {
                       const access = accesses?.find(a => a.pluginId === plugin.id);
@@ -141,7 +139,7 @@ export function Dashboard() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="favorites" className="mt-0">
+                <TabsContent value="favorites">
                   {favoritePlugins.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 bg-muted/20 rounded-xl border border-dashed border-border">
                       <Star className="h-10 w-10 text-muted-foreground/30 mb-4" />

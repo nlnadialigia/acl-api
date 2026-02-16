@@ -46,14 +46,12 @@ export function LoginForm() {
         return;
       }
 
-      // If login, data is { access_token, user: { id, email, role } }
-      // The current backend login returns { access_token, userId, email, role } based on my last view of AuthService.login (actually it returns { access_token })
-      // Wait, let me check the backend login response structure.
-
+      // If login, data is { access_token, user: { id, email, name, role } }
       login({
-        userId: data.userId || data.user?.id || "temp-id",
-        email: data.email || data.user?.email || email,
-        role: data.role || data.user?.role || "USER",
+        userId: data.user?.id || "temp-id",
+        email: data.user?.email || email,
+        username: data.user?.name || name || email.split('@')[0],
+        role: data.user?.role || "USER",
         token: data.access_token,
       });
     } catch (err) {

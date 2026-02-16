@@ -68,15 +68,17 @@ export function NotificationBell() {
   const notifications = data?.notifications || [];
   const hasRead = notifications.some(n => n.read);
 
-  function getNotifIcon(type: Notification["type"]) {
-    switch (type) {
-      case "access_request":
-        return <KeyRound className="h-4 w-4 text-primary" />;
-      case "access_granted":
-        return <ShieldCheck className="h-4 w-4 text-emerald-400" />;
-      case "access_rejected":
-        return <ShieldX className="h-4 w-4 text-destructive" />;
+  function getNotifIcon(title: string) {
+    if (title.includes("solicitou acesso") || title.includes("Solicitação")) {
+      return <KeyRound className="h-4 w-4 text-primary" />;
     }
+    if (title.includes("aprovado") || title.includes("concedido")) {
+      return <ShieldCheck className="h-4 w-4 text-emerald-400" />;
+    }
+    if (title.includes("rejeitado") || title.includes("negado")) {
+      return <ShieldX className="h-4 w-4 text-destructive" />;
+    }
+    return <Bell className="h-4 w-4 text-muted-foreground" />;
   }
 
   return (
@@ -149,7 +151,7 @@ export function NotificationBell() {
                   className={`flex items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/50 ${!notif.read ? "bg-primary/5" : ""
                     }`}
                 >
-                  <div className="mt-0.5">{getNotifIcon(notif.type)}</div>
+                  <div className="mt-0.5">{getNotifIcon(notif.title)}</div>
                   <div className="flex-1">
                     <p
                       className={`text-xs leading-relaxed ${!notif.read

@@ -30,6 +30,25 @@ async function main() {
     data: plugins
   });
 
+  console.log('Seeding public plugins...');
+
+  const publicPlugins = await prisma.plugin.findMany({
+    where: { isPublic: true },
+    include: { roleDefinitions: true }
+  });
+
+  for (const plugin of publicPlugins) {
+    if (plugin.roleDefinitions.length === 0) {
+      console.log(`Criando role para plugin público: ${plugin.name}`);
+      await prisma.pluginRole.create({
+        data: {
+          pluginId: plugin.id,
+          name: "Public Access",
+          description: "Default role for public access",
+        }
+      });
+    }
+  }
 
   console.log('Seeding finished.');
 }

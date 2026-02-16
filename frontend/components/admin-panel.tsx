@@ -26,6 +26,7 @@ import {apiFetch} from "@/lib/api-client";
 import {useAuth} from "@/lib/auth-context";
 import type {AccessRequest, Plugin, PluginPermissionDefinition, PluginRole, ScopeType, Unit, User} from "@/lib/types";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {toast} from "sonner";
 import {
   Check,
   ClipboardList,
@@ -34,7 +35,11 @@ import {
   Trash2,
   UserPlus,
   Users,
-  X
+  X,
+  Building2,
+  Plus,
+  Eye,
+  Edit
 } from "lucide-react";
 import {useState} from "react";
 
@@ -60,6 +65,13 @@ export function AdminPanel() {
   const [grantScopeType, setGrantScopeType] = useState<ScopeType>("GLOBAL");
   const [grantScopeId, setGrantScopeId] = useState<string>("");
 
+  // User management dialogs
+  const [viewUserDialogOpen, setViewUserDialogOpen] = useState(false);
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUserRole, setSelectedUserRole] = useState<string>("");
+  const [selectedManagedPlugins, setSelectedManagedPlugins] = useState<string[]>([]);
+
   // Plugin management dialog
   const [pluginDialogOpen, setPluginDialogOpen] = useState(false);
   const [editingPlugin, setEditingPlugin] = useState<Plugin | null>(null);
@@ -67,6 +79,13 @@ export function AdminPanel() {
   const [pluginDescription, setPluginDescription] = useState("");
   const [pluginIcon, setPluginIcon] = useState("");
   const [pluginIsPublic, setPluginIsPublic] = useState(false);
+
+  // Structure management state
+  const [structureDialogOpen, setStructureDialogOpen] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
+  const [unitName, setUnitName] = useState("");
+  const [factoryNames, setFactoryNames] = useState<string[]>([]);
+  const [newFactoryName, setNewFactoryName] = useState("");
 
   // ACL Management state
   const [grantRoleId, setGrantRoleId] = useState("");
@@ -82,7 +101,10 @@ export function AdminPanel() {
     queryKey: ["pending-requests"],
     queryFn: () => apiFetch("/requests"),
     enabled: !!session,
-    refetchInterval: 5000,
+    refetchInterval: (query) => {
+      const hasPending = query.state.data?.some(r => r.status === "PENDING");
+      return hasPending ? 30000 : false;
+    },
   });
 
   const {data: users} = useQuery<User[]>({
@@ -169,6 +191,35 @@ export function AdminPanel() {
     },
   });
 
+  const structureMutation = useMutation({
+    mutationFn: async () => {
+      const endpoint = editingUnit ? `/admin/units/${editingUnit.id}` : "/admin/units";
+      const method = editingUnit ? "PATCH" : "POST";
+      return apiFetch(endpoint, {
+        method,
+        body: JSON.stringify({
+          name: unitName,
+          factories: factoryNames.map(name => ({name})),
+        }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["structure"]});
+      setStructureDialogOpen(false);
+      setEditingUnit(null);
+      setUnitName("");
+      setFactoryNames([]);
+      setNewFactoryName("");
+    },
+  });
+
+  const deleteUnitMutation = useMutation({
+    mutationFn: (id: string) => apiFetch(`/admin/units/${id}`, {method: "DELETE"}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["structure"]});
+    },
+  });
+
   const createDefMutation = useMutation({
     mutationFn: (data: {pluginId?: string; name: string; label: string;}) =>
       apiFetch("/admin/plugins/definitions", {method: "POST", body: JSON.stringify(data)}),
@@ -187,6 +238,10 @@ export function AdminPanel() {
       setNewRoleName("");
       setNewRoleDesc("");
       setSelectedDefIds([]);
+      toast.success("Role criada com sucesso");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao criar role");
     },
   });
 
@@ -223,6 +278,58 @@ export function AdminPanel() {
     queryKey: ["plugin-roles", grantPluginId],
     queryFn: () => apiFetch(`/admin/plugins/${grantPluginId}/roles`),
     enabled: !!grantPluginId,
+  });
+
+  const {data: userPermissions} = useQuery({
+    queryKey: ["user-permissions", selectedUser?.id],
+    queryFn: () => apiFetch(`/users/${selectedUser?.id}/permissions`),
+    enabled: !!selectedUser?.id && viewUserDialogOpen,
+  });
+
+  const {data: managedPlugins} = useQuery<any[]>({
+    queryKey: ["managed-plugins", selectedUser?.id],
+    queryFn: () => apiFetch(`/users/${selectedUser?.id}/managed-plugins`),
+    enabled: !!selectedUser?.id && editUserDialogOpen,
+  });
+
+  const updateUserRoleMutation = useMutation({
+    mutationFn: async (data: {userId: string; role: string; managedPluginIds: string[];}) => {
+      // Update role
+      await apiFetch(`/users/${data.userId}/role`, {
+        method: "PATCH",
+        body: JSON.stringify({role: data.role}),
+      });
+
+      // Get current managed plugins
+      const current = await apiFetch(`/users/${data.userId}/managed-plugins`);
+      const currentIds = current.map((m: any) => m.pluginId);
+
+      // Add new plugins
+      for (const pluginId of data.managedPluginIds) {
+        if (!currentIds.includes(pluginId)) {
+          await apiFetch(`/users/${data.userId}/managed-plugins`, {
+            method: "POST",
+            body: JSON.stringify({pluginId}),
+          });
+        }
+      }
+
+      // Remove plugins
+      for (const pluginId of currentIds) {
+        if (!data.managedPluginIds.includes(pluginId)) {
+          await apiFetch(`/users/${data.userId}/managed-plugins/${pluginId}/remove`, {
+            method: "POST",
+          });
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["users"]});
+      queryClient.invalidateQueries({queryKey: ["managed-plugins"]});
+      setEditUserDialogOpen(false);
+      setSelectedUser(null);
+      toast.success("Usuário atualizado com sucesso");
+    },
   });
 
   const editPlugin = (plugin: Plugin) => {
@@ -311,6 +418,12 @@ export function AdminPanel() {
               <span className="hidden sm:inline">Plugins</span>
             </TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="structure" className="gap-2">
+              <Building2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Estrutura</span>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="acl" className="gap-2">
             <Check className="h-4 w-4" />
             <span className="hidden sm:inline">Roles & Permissões</span>
@@ -342,9 +455,9 @@ export function AdminPanel() {
                   <Table>
                     <TableHeader>
                       <TableRow className="border-border">
-                        <TableHead className="text-muted-foreground">Usuario</TableHead>
+                        <TableHead className="text-muted-foreground">Nome</TableHead>
                         <TableHead className="text-muted-foreground">Plugin</TableHead>
-                        <TableHead className="text-muted-foreground">Escopo solicitado</TableHead>
+                        <TableHead className="text-muted-foreground">Papel</TableHead>
                         <TableHead className="text-muted-foreground">Data</TableHead>
                         <TableHead className="text-right text-muted-foreground">Acoes</TableHead>
                       </TableRow>
@@ -352,13 +465,8 @@ export function AdminPanel() {
                     <TableBody>
                       {pendingRequests.map((req) => (
                         <TableRow key={req.id} className="border-border">
-                          <TableCell className="font-medium text-card-foreground">{req.user?.email}</TableCell>
+                          <TableCell className="font-medium text-card-foreground">{req.user?.name || req.user?.email}</TableCell>
                           <TableCell className="text-card-foreground">{req.plugin?.name}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="bg-primary/15 text-primary border-primary/30 text-xs text-uppercase">
-                              {getScopeLabel(req.scopeType, req.scopeId)}
-                            </Badge>
-                          </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="text-xs">
                               {req.role?.name || "Nível Padrão"}
@@ -407,15 +515,18 @@ export function AdminPanel() {
                   <Table>
                     <TableHeader>
                       <TableRow className="border-border">
+                        <TableHead className="text-muted-foreground">Nome</TableHead>
                         <TableHead className="text-muted-foreground">E-mail</TableHead>
                         <TableHead className="text-muted-foreground">Role</TableHead>
                         <TableHead className="text-muted-foreground">Desde</TableHead>
+                        <TableHead className="text-right text-muted-foreground">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {users?.map((user) => (
                         <TableRow key={user.id} className="border-border">
-                          <TableCell className="font-medium text-card-foreground">{user.email}</TableCell>
+                          <TableCell className="font-medium text-card-foreground">{user.name}</TableCell>
+                          <TableCell className="text-muted-foreground">{user.email}</TableCell>
                           <TableCell>
                             <Badge variant="secondary" className="bg-primary/15 text-primary border-primary/30">
                               {user.role}
@@ -423,6 +534,32 @@ export function AdminPanel() {
                           </TableCell>
                           <TableCell className="text-muted-foreground text-xs">
                             {new Date(user.createdAt).toLocaleDateString("pt-BR")}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setViewUserDialogOpen(true);
+                                }}
+                              >
+                                <Eye className="mr-1 h-3 w-3" />
+                                Visualizar
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setSelectedUserRole(user.role);
+                                  setEditUserDialogOpen(true);
+                                }}
+                              >
+                                <Edit className="mr-1 h-3 w-3" />
+                                Editar
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -519,6 +656,81 @@ export function AdminPanel() {
             </Card>
           </TabsContent>
         )}
+
+        {isAdmin && (
+          <TabsContent value="structure" className="mt-4">
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-card-foreground">
+                  <Building2 className="h-5 w-5 text-primary" />
+                  Unidades e Fábricas
+                </CardTitle>
+                <CardDescription>
+                  Gerencie a estrutura organizacional
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={() => {
+                    setEditingUnit(null);
+                    setUnitName("");
+                    setFactoryNames([]);
+                    setStructureDialogOpen(true);
+                  }}
+                  className="mb-4 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nova Unidade
+                </Button>
+                <div className="rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-border hover:bg-muted/50">
+                        <TableHead className="text-muted-foreground">Unidade</TableHead>
+                        <TableHead className="text-muted-foreground">Fábricas</TableHead>
+                        <TableHead className="text-right text-muted-foreground">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {structure?.map((unit) => (
+                        <TableRow key={unit.id} className="border-border hover:bg-muted/30">
+                          <TableCell className="font-medium text-card-foreground">{unit.name}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {unit.factories?.map(f => f.name).join(", ") || "Nenhuma"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingUnit(unit);
+                                  setUnitName(unit.name);
+                                  setFactoryNames(unit.factories?.map(f => f.name) || []);
+                                  setStructureDialogOpen(true);
+                                }}
+                              >
+                                Editar
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => deleteUnitMutation.mutate(unit.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
         <TabsContent value="acl" className="mt-4">
           <div className="grid gap-6 md:grid-cols-2">
             {/* DEFINITIONS MANAGEMENT */}
@@ -1011,6 +1223,243 @@ export function AdminPanel() {
               Conceder Acesso
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* STRUCTURE DIALOG */}
+      <Dialog open={structureDialogOpen} onOpenChange={setStructureDialogOpen}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-card-foreground">
+              {editingUnit ? "Editar Unidade" : "Nova Unidade"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="unit-name">Nome da Unidade</Label>
+              <input
+                id="unit-name"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={unitName}
+                onChange={(e) => setUnitName(e.target.value)}
+                placeholder="Ex: Unidade Sul"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Fábricas</Label>
+              <div className="flex gap-2">
+                <input
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={newFactoryName}
+                  onChange={(e) => setNewFactoryName(e.target.value)}
+                  placeholder="Nome da fábrica"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFactoryName.trim()) {
+                      setFactoryNames([...factoryNames, newFactoryName.trim()]);
+                      setNewFactoryName("");
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    if (newFactoryName.trim()) {
+                      setFactoryNames([...factoryNames, newFactoryName.trim()]);
+                      setNewFactoryName("");
+                    }
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {factoryNames.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {factoryNames.map((name, idx) => (
+                    <Badge key={idx} variant="secondary" className="gap-1">
+                      {name}
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => setFactoryNames(factoryNames.filter((_, i) => i !== idx))}
+                      />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Button
+              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => structureMutation.mutate()}
+              disabled={structureMutation.isPending || !unitName.trim()}
+            >
+              {structureMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {editingUnit ? "Atualizar" : "Criar"} Unidade
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* VIEW USER DIALOG */}
+      <Dialog open={viewUserDialogOpen} onOpenChange={(open) => {
+        setViewUserDialogOpen(open);
+        if (open && selectedUser) {
+          // Load managed plugins when opening
+          apiFetch(`/users/${selectedUser.id}/managed-plugins`).then((data: any[]) => {
+            setSelectedManagedPlugins(data.map(m => m.pluginId));
+          });
+        }
+      }}>
+        <DialogContent className="bg-card border-border sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="text-card-foreground">Detalhes do Usuário</DialogTitle>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="flex flex-col gap-4 pt-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Nome</Label>
+                  <p className="font-medium">{selectedUser.name}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">E-mail</Label>
+                  <p className="font-medium">{selectedUser.email}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Role</Label>
+                  <Badge variant="secondary" className="bg-primary/15 text-primary border-primary/30 mt-1">
+                    {selectedUser.role}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Membro desde</Label>
+                  <p className="text-sm">{new Date(selectedUser.createdAt).toLocaleDateString("pt-BR")}</p>
+                </div>
+              </div>
+
+              {selectedUser.role === "PLUGIN_MANAGER" && managedPlugins && managedPlugins.length > 0 && (
+                <div className="border-t pt-4">
+                  <Label className="text-sm font-bold mb-3 block">Plugins Gerenciados</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {managedPlugins.map((m: any) => (
+                      <Badge key={m.id} variant="secondary" className="bg-blue-500/15 text-blue-500 border-blue-500/30">
+                        {m.plugin.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t pt-4">
+                <Label className="text-sm font-bold mb-3 block">Permissões Ativas</Label>
+                {!userPermissions?.permissions?.length ? (
+                  <p className="text-sm text-muted-foreground italic">Nenhuma permissão ativa</p>
+                ) : (
+                  <div className="space-y-3">
+                    {userPermissions.permissions.map((perm: any) => (
+                      <div key={perm.id} className="p-3 border rounded-lg bg-muted/30">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-bold text-sm">{perm.plugin.name}</span>
+                          <Badge variant="outline" className="text-xs">{perm.role.name}</Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {perm.role.definitions?.map((def: any) => (
+                            <span key={def.id} className="text-[10px] bg-background px-2 py-0.5 rounded border">
+                              {def.label}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Escopo: {perm.scopeType === "GLOBAL" ? "Global" : `${perm.scopeType}: ${perm.scopeId}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* EDIT USER DIALOG */}
+      <Dialog open={editUserDialogOpen} onOpenChange={(open) => {
+        setEditUserDialogOpen(open);
+        if (open && selectedUser) {
+          // Load managed plugins when opening
+          apiFetch(`/users/${selectedUser.id}/managed-plugins`).then((data: any[]) => {
+            setSelectedManagedPlugins(data.map(m => m.pluginId));
+          });
+        }
+      }}>
+        <DialogContent className="bg-card border-border sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-card-foreground">Editar Usuário</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Altere a role e os plugins gerenciados
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="flex flex-col gap-4 pt-2">
+              <div className="p-3 bg-muted/30 rounded-lg">
+                <p className="text-sm"><span className="text-muted-foreground">Nome:</span> <span className="font-semibold">{selectedUser.name}</span></p>
+                <p className="text-sm"><span className="text-muted-foreground">E-mail:</span> <span className="font-semibold">{selectedUser.email}</span></p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-bold uppercase">Role do Sistema</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selectedUserRole}
+                  onChange={(e) => setSelectedUserRole(e.target.value)}
+                >
+                  <option value="USER">USER</option>
+                  <option value="PLUGIN_MANAGER">PLUGIN_MANAGER</option>
+                  <option value="PORTAL_ADMIN">PORTAL_ADMIN</option>
+                </select>
+              </div>
+
+              {selectedUserRole === "PLUGIN_MANAGER" && (
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-bold uppercase">Plugins Gerenciados</Label>
+                  <div className="max-h-[200px] overflow-y-auto p-2 border rounded bg-background">
+                    {plugins?.map((plugin) => (
+                      <label key={plugin.id} className="flex items-center gap-2 p-2 text-sm cursor-pointer hover:bg-muted rounded">
+                        <Checkbox
+                          checked={selectedManagedPlugins.includes(plugin.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedManagedPlugins([...selectedManagedPlugins, plugin.id]);
+                            } else {
+                              setSelectedManagedPlugins(selectedManagedPlugins.filter(id => id !== plugin.id));
+                            }
+                          }}
+                        />
+                        {plugin.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setEditUserDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={() => updateUserRoleMutation.mutate({
+                    userId: selectedUser.id,
+                    role: selectedUserRole,
+                    managedPluginIds: selectedUserRole === "PLUGIN_MANAGER" ? selectedManagedPlugins : []
+                  })}
+                  disabled={updateUserRoleMutation.isPending}
+                >
+                  {updateUserRoleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Salvar
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div >

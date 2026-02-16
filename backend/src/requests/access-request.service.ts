@@ -125,19 +125,47 @@ export class AccessRequestService {
             status: RequestStatus.PENDING,
             userJustification,
           },
+          include: {user: true, plugin: true},
         });
         createdRequests.push(request);
+
+        // Notify admins
+        const admins = await this.prisma.user.findMany({
+          where: {role: Role.PORTAL_ADMIN},
+        });
+        for (const admin of admins) {
+          await this.notification.notify(
+            admin.id,
+            'Nova Solicitação',
+            `${request.user.email} solicitou acesso ao plugin ${request.plugin.name}`,
+          );
+        }
+
+        // Notify managers of this plugin
+        const managers = await this.prisma.pluginManager.findMany({
+          where: {pluginId},
+          include: {user: true},
+        });
+        for (const manager of managers) {
+          await this.notification.notify(
+            manager.userId,
+            'Nova Solicitação',
+            `${request.user.email} solicitou acesso ao plugin ${request.plugin.name}`,
+          );
+          if (manager.user.email) {
+            await this.email.sendEmail(
+              manager.user.email,
+              'Nova Solicitação de Acesso',
+              'new-request',
+              {plugin: request.plugin.name, user: request.user.email}
+            );
+          }
+        }
       }
     }
 
     if (plugin.isPublic && createdRequests.length > 0) {
-      // Invalidate Cache and Notify once for all
       await this.cache.invalidate(userId, plugin.name);
-      await this.notification.notify(
-        userId,
-        'Acesso Concedido',
-        `Você agora tem acesso ao plugin público ${plugin.name}.`,
-      );
     }
 
     return createdRequests;
@@ -146,6 +174,7 @@ export class AccessRequestService {
   async listRequests(actor: {userId: string, role: Role;}) {
     if (actor.role === Role.PORTAL_ADMIN) {
       return this.prisma.accessRequest.findMany({
+        where: {status: RequestStatus.PENDING},
         include: {user: true, plugin: true, role: true},
         orderBy: {requestedAt: 'desc'},
       });
@@ -159,7 +188,10 @@ export class AccessRequestService {
     const pluginIds = managedPlugins.map(mp => mp.pluginId);
 
     return this.prisma.accessRequest.findMany({
-      where: {pluginId: {in: pluginIds}},
+      where: {
+        pluginId: {in: pluginIds},
+        status: RequestStatus.PENDING
+      },
       include: {user: true, plugin: true, role: true},
       orderBy: {requestedAt: 'desc'},
     });

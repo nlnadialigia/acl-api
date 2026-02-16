@@ -1,20 +1,26 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Mail, Loader2 } from "lucide-react"
-import type { EmailLog } from "@/lib/types"
+import {useQuery} from "@tanstack/react-query"
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card"
+import {Badge} from "@/components/ui/badge"
+import {ScrollArea} from "@/components/ui/scroll-area"
+import {Mail, Loader2} from "lucide-react"
+import {apiFetch} from "@/lib/api-client"
+
+interface EmailLog {
+  id: string;
+  to: string;
+  subject: string;
+  template: string;
+  context: any;
+  createdAt: string;
+}
 
 export function EmailLogViewer() {
-  const { data: emails, isLoading } = useQuery<EmailLog[]>({
+  const {data: emails, isLoading} = useQuery<EmailLog[]>({
     queryKey: ["emails"],
-    queryFn: async () => {
-      const res = await fetch("/api/emails")
-      return res.json()
-    },
-    refetchInterval: 3000,
+    queryFn: () => apiFetch("/emails"),
+    refetchInterval: 30000,
   })
 
   return (
@@ -24,7 +30,7 @@ export function EmailLogViewer() {
           Log de Emails
         </h2>
         <p className="mt-1 text-muted-foreground">
-          Visualize todos os emails enviados pelo sistema (simulacao)
+          Visualize todos os emails enviados pelo sistema
         </p>
       </div>
 
@@ -63,15 +69,20 @@ export function EmailLogViewer() {
                         Para: {email.to}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {new Date(email.sentAt).toLocaleString("pt-BR")}
+                        {new Date(email.createdAt).toLocaleString("pt-BR")}
                       </span>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-card-foreground">
                       {email.subject}
                     </p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {email.body}
-                    </p>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      <p><strong>Template:</strong> {email.template}</p>
+                      {email.context && (
+                        <pre className="mt-1 text-[10px] bg-background/50 p-2 rounded overflow-x-auto">
+                          {JSON.stringify(email.context, null, 2)}
+                        </pre>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

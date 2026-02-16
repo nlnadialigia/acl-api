@@ -101,6 +101,7 @@ export interface EmailLog {
 export interface AuthSession {
   userId: string;
   email: string;
+  username: string;
   role: Role;
   token: string;
 }

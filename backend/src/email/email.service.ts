@@ -17,4 +17,11 @@ export class EmailService {
       },
     });
   }
+
+  async findAll() {
+    return this.prisma.email.findMany({
+      orderBy: {createdAt: 'desc'},
+      take: 100,
+    });
+  }
 }

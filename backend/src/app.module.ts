@@ -8,6 +8,7 @@ import {PrismaModule} from './prisma/prisma.module';
 import {RedisModule} from './redis/redis.module';
 import {AccessRequestModule} from './requests/access-request.module';
 import {UsersModule} from './users/users.module';
+import {UnitsModule} from './units/units.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import {UsersModule} from './users/users.module';
     NotificationModule,
     EmailModule,
     AccessRequestModule,
+    UnitsModule,
   ],
 })
 export class AppModule { }
