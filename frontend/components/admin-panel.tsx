@@ -7,6 +7,7 @@ import {Checkbox} from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
@@ -20,9 +21,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
+import {Textarea} from "@/components/ui/textarea";
 import {apiFetch} from "@/lib/api-client";
 import {useAuth} from "@/lib/auth-context";
-import type {AccessRequest, Plugin, PluginPermissionDefinition, PluginRole, ScopeType, User} from "@/lib/types";
+import type {AccessRequest, Plugin, PluginPermissionDefinition, PluginRole, ScopeType, Unit, User} from "@/lib/types";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {
   Check,
@@ -36,8 +38,7 @@ import {
 } from "lucide-react";
 import {useState} from "react";
 
-const AVAILABLE_UNITS = ["Unidade SP", "Unidade RJ", "Unidade MG"];
-const AVAILABLE_FACTORIES = ["Fabrica Norte", "Fabrica Sul"];
+
 
 export function AdminPanel() {
   const {session} = useAuth();
@@ -46,9 +47,11 @@ export function AdminPanel() {
 
   // Resolve dialog
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
+  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<AccessRequest | null>(null);
   const [grantedScopeType, setGrantedScopeType] = useState<ScopeType>("GLOBAL");
   const [grantedScopeId, setGrantedScopeId] = useState<string>("");
+  const [managerJustification, setManagerJustification] = useState("");
 
   // Grant access dialog
   const [grantDialogOpen, setGrantDialogOpen] = useState(false);
@@ -94,22 +97,33 @@ export function AdminPanel() {
     enabled: !!session,
   });
 
+  const {data: structure} = useQuery<Unit[]>({
+    queryKey: ["structure"],
+    queryFn: () => apiFetch("/plugins/structure"),
+    enabled: !!session,
+  });
+
   // Mutations
   const resolveMutation = useMutation({
     mutationFn: async ({requestId, action}: {requestId: string; action: "approve" | "reject";}) => {
       const endpoint = action === "approve" ? `/requests/${requestId}/approve` : `/requests/${requestId}/reject`;
       return apiFetch(endpoint, {
         method: "POST",
-        body: action === "approve" ? JSON.stringify({
-          scopeType: grantedScopeType,
-          scopeId: grantedScopeType === "GLOBAL" ? undefined : grantedScopeId,
-        }) : undefined,
+        body: JSON.stringify({
+          managerJustification,
+          ...(action === "approve" ? {
+            scopeType: grantedScopeType,
+            scopeId: grantedScopeType === "GLOBAL" ? undefined : grantedScopeId,
+          } : {})
+        }),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({queryKey: ["pending-requests"]});
       setResolveDialogOpen(false);
+      setRejectionDialogOpen(false);
       setSelectedRequest(null);
+      setManagerJustification("");
     },
   });
 
@@ -359,7 +373,11 @@ export function AdminPanel() {
                                 <Check className="mr-1 h-3 w-3" />
                                 Aprovar
                               </Button>
-                              <Button size="sm" variant="destructive" onClick={() => resolveMutation.mutate({requestId: req.id, action: "reject"})}>
+                              <Button size="sm" variant="destructive" onClick={() => {
+                                setSelectedRequest(req);
+                                setManagerJustification("");
+                                setRejectionDialogOpen(true);
+                              }}>
                                 <X className="mr-1 h-3 w-3" />
                                 Rejeitar
                               </Button>
@@ -521,7 +539,7 @@ export function AdminPanel() {
                     onChange={(e) => setSelectedAclPluginId(e.target.value || null)}
                   >
                     <option value="">Permissão Global</option>
-                    {plugins?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {plugins?.filter(p => !p.isPublic).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
 
@@ -681,32 +699,45 @@ export function AdminPanel() {
 
       {/* APPROVE DIALOG */}
       <Dialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent className="bg-card border-border sm:max-w-[450px]">
           <DialogHeader>
-            <DialogTitle className="text-card-foreground">Aprovar Acesso</DialogTitle>
+            <DialogTitle className="text-card-foreground">Aprovar Solicitação</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Revise e confirme os detalhes do acesso a ser concedido.
+            </DialogDescription>
           </DialogHeader>
           {selectedRequest && (
-            <div className="flex flex-col gap-4 pt-2">
-              <div className="rounded-lg bg-muted p-3">
-                <p className="text-sm">
-                  <span className="font-medium">Usuario:</span> {selectedRequest.user?.email}
-                </p>
-                <p className="text-sm">
-                  <span className="font-medium">Plugin:</span> {selectedRequest.plugin?.name}
-                </p>
-                <p className="text-sm">
-                  <span className="font-medium">Papel solicitado:</span> {selectedRequest.role?.name || "Nível Padrão"}
-                </p>
+            <div className="flex flex-col gap-5 pt-3">
+              <div className="rounded-lg bg-muted/40 border border-border/50 p-4 space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground font-medium">Usuário:</span>
+                  <span className="font-semibold text-card-foreground">{selectedRequest.user?.email}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground font-medium">Plugin:</span>
+                  <span className="font-semibold text-card-foreground">{selectedRequest.plugin?.name}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground font-medium">Papel:</span>
+                  <Badge variant="outline" className="text-[10px] uppercase">{selectedRequest.role?.name || "Nível Padrão"}</Badge>
+                </div>
+                {selectedRequest.userJustification && (
+                  <div className="mt-3 pt-3 border-t border-border/50">
+                    <p className="text-[10px] uppercase font-bold text-primary mb-1">Justificativa do Usuário:</p>
+                    <p className="text-xs italic text-muted-foreground bg-background/30 p-2 rounded">"{selectedRequest.userJustification}"</p>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-3">
-                <Label className="text-sm font-medium">Escopo a Conceder</Label>
+                <Label className="text-xs font-bold uppercase tracking-wider text-card-foreground">Escopo a Conceder</Label>
                 <div className="grid grid-cols-3 gap-2">
                   {(["GLOBAL", "UNIT", "FACTORY"] as ScopeType[]).map((type) => (
                     <Button
                       key={type}
                       variant={grantedScopeType === type ? "default" : "outline"}
                       size="sm"
+                      className="text-[10px] font-extrabold h-9"
                       onClick={() => {
                         setGrantedScopeType(type);
                         setGrantedScopeId("");
@@ -719,32 +750,91 @@ export function AdminPanel() {
               </div>
 
               {grantedScopeType !== "GLOBAL" && (
-                <div className="flex flex-col gap-2">
-                  <Label className="text-sm font-medium">
-                    {grantedScopeType === "UNIT" ? "Unidade" : "Fábrica"}
+                <div className="flex flex-col gap-2 animate-in fade-in duration-300">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-card-foreground">
+                    {grantedScopeType === "UNIT" ? "Selecionar Unidade" : "Selecionar Fábrica"}
                   </Label>
-                  <div className="rounded-lg border border-input bg-background p-3 grid grid-cols-1 gap-2">
-                    {(grantedScopeType === "UNIT" ? AVAILABLE_UNITS : AVAILABLE_FACTORIES).map((id) => (
-                      <label key={id} className="flex items-center gap-2 cursor-pointer text-sm">
+                  <div className="rounded-lg border border-input bg-background/30 p-2 grid grid-cols-1 gap-1 max-h-[120px] overflow-y-auto">
+                    {(grantedScopeType === "UNIT"
+                      ? structure?.map(u => ({id: u.name, name: u.name}))
+                      : structure?.flatMap(u => u.factories?.map(f => ({id: f.name, name: f.name})) || [])
+                    )?.map((opt) => (
+                      <label key={opt.id} className="flex items-center gap-3 cursor-pointer text-xs p-2 hover:bg-primary/5 rounded-md transition-colors">
                         <Checkbox
-                          checked={grantedScopeId === id}
-                          onCheckedChange={() => setGrantedScopeId(id)}
+                          checked={grantedScopeId === opt.id}
+                          onCheckedChange={() => setGrantedScopeId(opt.id)}
                         />
-                        {id}
+                        {opt.name}
                       </label>
                     ))}
                   </div>
                 </div>
               )}
 
-              <Button
-                className="w-full bg-emerald-600 text-emerald-50 hover:bg-emerald-700"
-                onClick={() => resolveMutation.mutate({requestId: selectedRequest.id, action: "approve"})}
-                disabled={resolveMutation.isPending || (grantedScopeType !== "GLOBAL" && !grantedScopeId)}
-              >
-                {resolveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-                Confirmar Aprovação
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-card-foreground">Justificativa do Gestor <span className="text-[10px] font-normal text-muted-foreground">(Opcional)</span></Label>
+                <Textarea
+                  placeholder="Observações sobre a aprovação..."
+                  className="min-h-[80px] text-xs resize-none"
+                  value={managerJustification}
+                  onChange={(e) => setManagerJustification(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setResolveDialogOpen(false)}>Cancelar</Button>
+                <Button
+                  className="flex-[2] bg-emerald-600 text-emerald-50 hover:bg-emerald-700 font-bold"
+                  onClick={() => resolveMutation.mutate({requestId: selectedRequest.id, action: "approve"})}
+                  disabled={resolveMutation.isPending || (grantedScopeType !== "GLOBAL" && !grantedScopeId)}
+                >
+                  {resolveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                  Confirmar Aprovação
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* REJECT DIALOG */}
+      <Dialog open={rejectionDialogOpen} onOpenChange={setRejectionDialogOpen}>
+        <DialogContent className="bg-card border-border sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Recusar Solicitação</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Você deve obrigatoriamente informar o motivo da recusa.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRequest && (
+            <div className="flex flex-col gap-5 pt-3">
+              <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-4 space-y-1">
+                <p className="text-xs"><span className="text-muted-foreground">Usuário:</span> <span className="font-semibold">{selectedRequest.user?.email}</span></p>
+                <p className="text-xs"><span className="text-muted-foreground">Plugin:</span> <span className="font-semibold">{selectedRequest.plugin?.name}</span></p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-destructive">Motivo da Recusa (Obrigatório)</Label>
+                <Textarea
+                  placeholder="Explique por que o acesso está sendo recusado..."
+                  className="min-h-[100px] text-xs resize-none border-destructive/30 focus-visible:ring-destructive/20"
+                  value={managerJustification}
+                  onChange={(e) => setManagerJustification(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setRejectionDialogOpen(false)}>Voltar</Button>
+                <Button
+                  variant="destructive"
+                  className="flex-[2] font-bold"
+                  onClick={() => resolveMutation.mutate({requestId: selectedRequest.id, action: "reject"})}
+                  disabled={resolveMutation.isPending || !managerJustification.trim()}
+                >
+                  {resolveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
+                  Confirmar Recusa
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -895,14 +985,17 @@ export function AdminPanel() {
                 <Label className="text-sm font-medium">
                   {grantScopeType === "UNIT" ? "Unidade" : "Fábrica"}
                 </Label>
-                <div className="rounded-lg border border-input bg-background p-3 grid grid-cols-1 gap-2">
-                  {(grantScopeType === "UNIT" ? AVAILABLE_UNITS : AVAILABLE_FACTORIES).map((id) => (
-                    <label key={id} className="flex items-center gap-2 cursor-pointer text-sm">
+                <div className="rounded-lg border border-input bg-background p-3 grid grid-cols-1 gap-2 max-h-[150px] overflow-y-auto">
+                  {(grantScopeType === "UNIT"
+                    ? structure?.map(u => ({id: u.name, name: u.name}))
+                    : structure?.flatMap(u => u.factories?.map(f => ({id: f.name, name: f.name})) || [])
+                  )?.map((opt) => (
+                    <label key={opt.id} className="flex items-center gap-2 cursor-pointer text-sm">
                       <Checkbox
-                        checked={grantScopeId === id}
-                        onCheckedChange={() => setGrantScopeId(id)}
+                        checked={grantScopeId === opt.id}
+                        onCheckedChange={() => setGrantScopeId(opt.id)}
                       />
-                      {id}
+                      {opt.name}
                     </label>
                   ))}
                 </div>

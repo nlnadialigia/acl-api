@@ -1,4 +1,4 @@
-import {Body, Controller, Get, Patch, Query, UseGuards} from '@nestjs/common';
+import {Body, Controller, Delete, Get, Patch, Query, UseGuards} from '@nestjs/common';
 import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
 import {JwtAuthGuard} from '../auth/guards/jwt-auth.guard';
 import {NotificationService} from './notification.service';
@@ -42,5 +42,12 @@ export class NotificationController {
     }
 
     return {success: false};
+  }
+
+  @Delete()
+  @ApiOperation({summary: 'Remover notificações lidas'})
+  async deleteRead(@Query('userId') userId: string) {
+    await this.notificationService.deleteRead(userId);
+    return {success: true};
   }
 }

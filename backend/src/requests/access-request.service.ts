@@ -1,5 +1,5 @@
 import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
-import {PermissionStatus, RequestStatus, Role, ScopeType} from '@prisma/client';
+import {AccessRequest, PermissionStatus, RequestStatus, Role, ScopeType} from '@prisma/client';
 import {AuditService} from '../audit/audit.service';
 import {EmailService} from '../email/email.service';
 import {NotificationService} from '../notifications/notification.service';
@@ -16,7 +16,14 @@ export class AccessRequestService {
     private cache: PermissionCacheService,
   ) { }
 
-  async createRequest(userId: string, pluginId: string, scopeType: ScopeType, scopeId?: string, roleId?: string) {
+  async createRequest(
+    userId: string,
+    pluginId: string,
+    scopeType: ScopeType,
+    scopeIds: string[],
+    roleId?: string,
+    userJustification?: string
+  ) {
     // Check if plugin exists
     const plugin = await this.prisma.plugin.findUnique({
       where: {id: pluginId},
@@ -39,86 +46,101 @@ export class AccessRequestService {
       effectiveRoleId = defaultRole.id;
     }
 
-    // Check for existing pending request for this specific scope/role combination
-    // Note: The unique constraint is [userId, pluginId, scopeType, scopeId], but for requests we might allow multiple roles to be pending?
-    // Actually, usually one pending per scope is enough.
-    const existing = await this.prisma.accessRequest.findFirst({
-      where: {userId, pluginId, scopeType, scopeId, status: RequestStatus.PENDING},
-    });
-    if (existing) throw new BadRequestException('A pending request already exists for this scope/plugin');
+    // Default to a single empty string for GLOBAL if no scopeIds provided
+    const idsToProcess = scopeType === 'GLOBAL' ? [null] : scopeIds;
+    if (idsToProcess.length === 0) {
+      throw new BadRequestException('At least one scope must be selected');
+    }
 
-    if (plugin.isPublic) {
-      return this.prisma.$transaction(async (tx) => {
-        // 1. Create Request (Already Approved)
-        const request = await tx.accessRequest.create({
-          data: {
-            userId,
-            pluginId,
-            roleId: effectiveRoleId!,
-            scopeType,
-            scopeId,
-            status: RequestStatus.APPROVED,
-            resolvedAt: new Date(),
-          },
-          include: {user: true, role: true},
-        });
+    const createdRequests: AccessRequest[] = [];
 
-        // 2. Create Permission only if not exists
-        const existingPermission = await tx.pluginPermission.findFirst({
-          where: {
-            userId,
-            pluginId,
-            scopeType,
-            scopeId: scopeId ?? null,
-          },
-        });
+    for (const scopeId of idsToProcess) {
+      // Check for existing pending request for this specific scope/role combination
+      const existing = await this.prisma.accessRequest.findFirst({
+        where: {userId, pluginId, scopeType, scopeId: scopeId ?? null, status: RequestStatus.PENDING},
+      });
+      if (existing) continue; // Skip if already pending
 
-        if (!existingPermission) {
-          await tx.pluginPermission.create({
+      if (plugin.isPublic) {
+        const request = await this.prisma.$transaction(async (tx) => {
+          // 1. Create Request (Already Approved)
+          const req = await tx.accessRequest.create({
             data: {
               userId,
               pluginId,
               roleId: effectiveRoleId!,
               scopeType,
               scopeId: scopeId ?? null,
-              status: PermissionStatus.ACTIVE,
+              status: RequestStatus.APPROVED,
+              resolvedAt: new Date(),
+              userJustification,
+            },
+            include: {user: true, role: true},
+          });
+
+          // 2. Create Permission only if not exists
+          const existingPermission = await tx.pluginPermission.findFirst({
+            where: {
+              userId,
+              pluginId,
+              scopeType,
+              scopeId: scopeId ?? null,
             },
           });
-        }
 
-        // 3. Audit Log
-        await this.audit.log({
-          targetId: userId,
-          resourceId: pluginId,
-          action: 'AUTO_APPROVE',
-          actorId: userId,
-          details: {requestId: request.id, scope: scopeType, scopeId, role: request.role.name},
+          if (!existingPermission) {
+            await tx.pluginPermission.create({
+              data: {
+                userId,
+                pluginId,
+                roleId: effectiveRoleId!,
+                scopeType,
+                scopeId: scopeId ?? null,
+                status: PermissionStatus.ACTIVE,
+              },
+            });
+          }
+
+          // 3. Audit Log
+          await this.audit.log({
+            targetId: userId,
+            resourceId: pluginId,
+            action: 'AUTO_APPROVE',
+            actorId: userId,
+            details: {requestId: req.id, scope: scopeType, scopeId, role: req.role.name},
+          });
+
+          return req;
         });
 
-        // 4. Invalidate Cache
-        await this.cache.invalidate(userId, plugin.name);
-
-        // 5. Notify User
-        await this.notification.notify(
-          userId,
-          'Acesso Concedido',
-          `Você agora tem acesso ao plugin público ${plugin.name} como ${request.role.name}.`,
-        );
-
-        return request;
-      });
+        createdRequests.push(request);
+      } else {
+        const request = await this.prisma.accessRequest.create({
+          data: {
+            userId,
+            pluginId,
+            roleId: effectiveRoleId!,
+            scopeType,
+            scopeId: scopeId ?? null,
+            status: RequestStatus.PENDING,
+            userJustification,
+          },
+        });
+        createdRequests.push(request);
+      }
     }
 
-    return this.prisma.accessRequest.create({
-      data: {
+    if (plugin.isPublic && createdRequests.length > 0) {
+      // Invalidate Cache and Notify once for all
+      await this.cache.invalidate(userId, plugin.name);
+      await this.notification.notify(
         userId,
-        pluginId,
-        roleId: effectiveRoleId!,
-        scopeType,
-        scopeId,
-        status: RequestStatus.PENDING,
-      },
-    });
+        'Acesso Concedido',
+        `Você agora tem acesso ao plugin público ${plugin.name}.`,
+      );
+    }
+
+    return createdRequests;
   }
 
   async listRequests(actor: {userId: string, role: Role;}) {
@@ -151,7 +173,7 @@ export class AccessRequestService {
     });
   }
 
-  async approveRequest(requestId: string, actorId: string) {
+  async approveRequest(requestId: string, actorId: string, managerJustification?: string) {
     const request = await this.prisma.accessRequest.findUnique({
       where: {id: requestId},
       include: {plugin: true, user: true},
@@ -165,7 +187,12 @@ export class AccessRequestService {
       // 1. Update Request
       const updatedRequest = await tx.accessRequest.update({
         where: {id: requestId},
-        data: {status: RequestStatus.APPROVED, resolvedById: actorId, resolvedAt: new Date()},
+        data: {
+          status: RequestStatus.APPROVED,
+          resolvedById: actorId,
+          resolvedAt: new Date(),
+          managerJustification
+        },
         include: {role: true},
       });
 
@@ -198,17 +225,27 @@ export class AccessRequestService {
         resourceId: request.pluginId,
         action: 'APPROVE_ACCESS',
         actorId: actorId,
-        details: {requestId, scope: request.scopeType, scopeId: request.scopeId, role: updatedRequest.role.name},
+        details: {
+          requestId,
+          scope: request.scopeType,
+          scopeId: request.scopeId,
+          role: updatedRequest.role.name,
+          managerJustification
+        },
       });
 
       // 4. Invalidate Cache
       await this.cache.invalidate(request.userId, request.plugin.name);
 
       // 5. Notify User
+      const approvalMsg = managerJustification
+        ? `Sua solicitação para o plugin ${request.plugin.name} foi aprovada. Obs: ${managerJustification}`
+        : `Sua solicitação para o plugin ${request.plugin.name} foi aprovada.`;
+
       await this.notification.notify(
         request.userId,
         'Acesso Aprovado',
-        `Sua solicitação para o plugin ${request.plugin.name} foi aprovada.`,
+        approvalMsg,
       );
 
       // 6. Email (Async)
@@ -218,7 +255,7 @@ export class AccessRequestService {
     });
   }
 
-  async rejectRequest(requestId: string, actorId: string, reason?: string) {
+  async rejectRequest(requestId: string, actorId: string, managerJustification: string) {
     const request = await this.prisma.accessRequest.findUnique({
       where: {id: requestId},
       include: {plugin: true, user: true},
@@ -226,17 +263,23 @@ export class AccessRequestService {
 
     if (!request) throw new NotFoundException('Request not found');
     if (request.status !== RequestStatus.PENDING) throw new BadRequestException('Request is not pending');
+    if (!managerJustification) throw new BadRequestException('A reason/justification must be provided to reject a request');
 
     const updatedRequest = await this.prisma.accessRequest.update({
       where: {id: requestId},
-      data: {status: RequestStatus.REJECTED, resolvedById: actorId, resolvedAt: new Date()},
+      data: {
+        status: RequestStatus.REJECTED,
+        resolvedById: actorId,
+        resolvedAt: new Date(),
+        managerJustification
+      },
     });
 
     // Notify User
     await this.notification.notify(
       request.userId,
       'Acesso Negado',
-      `Sua solicitação para o plugin ${request.plugin.name} foi recusada.`,
+      `Sua solicitação para o plugin ${request.plugin.name} foi recusada. Motivo: ${managerJustification}`,
     );
 
     return updatedRequest;

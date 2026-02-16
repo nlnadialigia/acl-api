@@ -22,13 +22,30 @@ export class AccessRequestController {
         pluginId: {type: 'string'},
         roleId: {type: 'string'},
         scopeType: {enum: ['GLOBAL', 'UNIT', 'FACTORY']},
-        scopeId: {type: 'string', nullable: true},
+        scopeIds: {type: 'array', items: {type: 'string'}, nullable: true},
+        userJustification: {type: 'string', nullable: true},
       },
       required: ['pluginId', 'roleId', 'scopeType'],
     },
   })
-  async create(@Request() req, @Body() body: {pluginId: string; scopeType: ScopeType; scopeId?: string; roleId: string;}) {
-    return this.requestService.createRequest(req.user.userId, body.pluginId, body.scopeType, body.scopeId, body.roleId);
+  async create(
+    @Request() req,
+    @Body() body: {
+      pluginId: string;
+      scopeType: ScopeType;
+      scopeIds?: string[];
+      roleId: string;
+      userJustification?: string;
+    }
+  ) {
+    return this.requestService.createRequest(
+      req.user.userId,
+      body.pluginId,
+      body.scopeType,
+      body.scopeIds || [],
+      body.roleId,
+      body.userJustification
+    );
   }
 
   @Get()
@@ -41,16 +58,16 @@ export class AccessRequestController {
   @Roles(Role.PORTAL_ADMIN, Role.PLUGIN_MANAGER)
   @UseGuards(RolesGuard)
   @ApiOperation({summary: 'Approve an access request'})
-  async approve(@Request() req, @Param('id') id: string) {
-    return this.requestService.approveRequest(id, req.user.userId);
+  async approve(@Request() req, @Param('id') id: string, @Body() body: {managerJustification?: string;}) {
+    return this.requestService.approveRequest(id, req.user.userId, body.managerJustification);
   }
 
   @Post(':id/reject')
   @Roles(Role.PORTAL_ADMIN, Role.PLUGIN_MANAGER)
   @UseGuards(RolesGuard)
   @ApiOperation({summary: 'Reject an access request'})
-  async reject(@Request() req, @Param('id') id: string, @Body() body: {reason?: string;}) {
-    return this.requestService.rejectRequest(id, req.user.userId, body.reason);
+  async reject(@Request() req, @Param('id') id: string, @Body() body: {managerJustification: string;}) {
+    return this.requestService.rejectRequest(id, req.user.userId, body.managerJustification);
   }
 
   @Post('grant')

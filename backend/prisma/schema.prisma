@@ -47,8 +47,22 @@ model User {
   actionsAsActor  PermissionAuditLog[] @relation("Actor")
   actionsAsTarget PermissionAuditLog[] @relation("Target")
   notifications   Notification[]
+  favoritePlugins UserPluginFavorite[]
 
   @@map("users")
+}
+
+model UserPluginFavorite {
+  id        String   @id @default(uuid())
+  userId    String
+  pluginId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plugin Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pluginId])
+  @@map("user_plugin_favorites")
 }
 
 model Plugin {
@@ -67,6 +81,7 @@ model Plugin {
   accessRequests       AccessRequest[]
   roleDefinitions      PluginRole[]
   availableDefinitions PluginPermissionDefinition[]
+  userPluginFavorites  UserPluginFavorite[]
 
   @@map("plugins")
 }
@@ -159,16 +174,18 @@ model PluginPermission {
 }
 
 model AccessRequest {
-  id           String        @id @default(uuid())
-  userId       String
-  pluginId     String
-  roleId       String
-  scopeType    ScopeType
-  scopeId      String?
-  status       RequestStatus @default(PENDING)
-  requestedAt  DateTime      @default(now())
-  resolvedAt   DateTime?
-  resolvedById String?
+  id                   String        @id @default(uuid())
+  userId               String
+  pluginId             String
+  roleId               String
+  scopeType            ScopeType
+  scopeId              String?
+  status               RequestStatus @default(PENDING)
+  requestedAt          DateTime      @default(now())
+  resolvedAt           DateTime?
+  resolvedById         String?
+  userJustification    String?       @db.Text
+  managerJustification String?       @db.Text
 
   user   User       @relation("Requester", fields: [userId], references: [id])
   plugin Plugin     @relation(fields: [pluginId], references: [id])

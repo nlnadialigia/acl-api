@@ -8,15 +8,17 @@ import {PluginPage} from "@/components/plugin-page";
 import {apiFetch} from "@/lib/api-client";
 import {useAuth} from "@/lib/auth-context";
 import type {AccessRequest, Plugin} from "@/lib/types";
-import {useQuery} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {Loader2} from "lucide-react";
 import {useState} from "react";
 
 export function Dashboard() {
   const {session} = useAuth();
+  const queryClient = useQueryClient();
   const [showAdmin, setShowAdmin] = useState(false);
   const [showEmails, setShowEmails] = useState(false);
   const [activePluginId, setActivePluginId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("all");
 
   const {data: plugins, isLoading: pluginsLoading} = useQuery<Plugin[]>({
     queryKey: ["plugins"],
@@ -32,6 +34,13 @@ export function Dashboard() {
     refetchInterval: (query) => {
       const hasPending = query.state.data?.some(a => a.status === "PENDING");
       return hasPending ? 30000 : false;
+    },
+  });
+
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: (pluginId: string) => apiFetch(`/plugins/${pluginId}/favorite`, {method: "POST"}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["plugins"]});
     },
   });
 
@@ -56,6 +65,10 @@ export function Dashboard() {
 
   const isManagementRole = session.role === "PORTAL_ADMIN" || session.role === "PLUGIN_MANAGER";
 
+  const favoritePlugins = plugins?.filter(p =>
+    p.userPluginFavorites?.some(f => f.userId === session.userId)
+  ) || [];
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <DashboardHeader
@@ -79,13 +92,27 @@ export function Dashboard() {
           <EmailLogViewer />
         ) : (
           <>
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-foreground text-balance">
-                Plugins Disponiveis
-              </h2>
-              <p className="mt-1 text-muted-foreground">
-                Solicite acesso aos plugins necessarios para seu trabalho
-              </p>
+            <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground text-balance">
+                  Portal de Plugins
+                </h2>
+                <p className="mt-1 text-muted-foreground">
+                  Gerencie seus acessos e ferramentas em um só lugar
+                </p>
+              </div>
+
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
+                <TabsList className="bg-muted/50 border border-border">
+                  <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                    Todos
+                  </TabsTrigger>
+                  <TabsTrigger value="favorites" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex gap-2">
+                    <Star className={`h-3.5 w-3.5 ${activeTab === 'favorites' ? 'fill-current' : 'text-muted-foreground'}`} />
+                    Favoritos
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
 
             {pluginsLoading ? (
@@ -93,22 +120,54 @@ export function Dashboard() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {plugins?.map((plugin) => {
-                  const access = accesses?.find(
-                    (a) => a.pluginId === plugin.id
-                  );
-                  return (
-                    <PluginCard
-                      key={plugin.id}
-                      plugin={plugin}
-                      access={access}
-                      userId={session.userId}
-                      onOpenPlugin={handleOpenPlugin}
-                    />
-                  );
-                })}
-              </div>
+              <Tabs value={activeTab} className="mt-0">
+                <TabsContent value="all" className="mt-0">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {plugins?.map((plugin) => {
+                      const access = accesses?.find(a => a.pluginId === plugin.id);
+                      const isFavorite = plugin.userPluginFavorites?.some(f => f.userId === session.userId);
+                      return (
+                        <PluginCard
+                          key={plugin.id}
+                          plugin={plugin}
+                          access={access}
+                          userId={session.userId}
+                          onOpenPlugin={handleOpenPlugin}
+                          isFavorite={isFavorite}
+                          onToggleFavorite={() => toggleFavoriteMutation.mutate(plugin.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="favorites" className="mt-0">
+                  {favoritePlugins.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 bg-muted/20 rounded-xl border border-dashed border-border">
+                      <Star className="h-10 w-10 text-muted-foreground/30 mb-4" />
+                      <p className="text-muted-foreground font-medium">Você ainda não tem favoritos</p>
+                      <p className="text-xs text-muted-foreground/70">Clique na estrela dos cards para favoritar um plugin</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {favoritePlugins.map((plugin) => {
+                        const access = accesses?.find(a => a.pluginId === plugin.id);
+                        return (
+                          <PluginCard
+                            key={plugin.id}
+                            plugin={plugin}
+                            access={access}
+                            userId={session.userId}
+                            onOpenPlugin={handleOpenPlugin}
+                            isFavorite={true}
+                            onToggleFavorite={() => toggleFavoriteMutation.mutate(plugin.id)}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             )}
           </>
         )}

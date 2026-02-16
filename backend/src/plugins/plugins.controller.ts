@@ -1,4 +1,4 @@
-import {Controller, Get, Param, Request, UseGuards} from '@nestjs/common';
+import {Controller, Get, Param, Post, Request, UseGuards} from '@nestjs/common';
 import {ApiBearerAuth, ApiOperation, ApiTags} from '@nestjs/swagger';
 import {PluginAccess} from '../auth/decorators/plugin-access.decorator';
 import {JwtAuthGuard} from '../auth/guards/jwt-auth.guard';
@@ -43,5 +43,17 @@ export class PluginsController {
   @ApiOperation({summary: 'Get unit/factory structure'})
   async getStructure() {
     return this.pluginsService.getUnitStructure();
+  }
+
+  @Post(':id/favorite')
+  @ApiOperation({summary: 'Toggle favorite status for a plugin'})
+  async toggleFavorite(@Param('id') id: string, @Request() req: any) {
+    return this.pluginsService.toggleFavorite(req.user.userId, id);
+  }
+
+  @Get('favorites')
+  @ApiOperation({summary: 'List user favorite plugins'})
+  async listFavorites(@Request() req: any) {
+    return this.pluginsService.listFavorites(req.user.userId);
   }
 }

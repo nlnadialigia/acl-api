@@ -11,7 +11,7 @@ import {apiFetch} from "@/lib/api-client";
 import {useAuth} from "@/lib/auth-context";
 import type {Notification} from "@/lib/types";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import {Bell, CheckCheck, KeyRound, ShieldCheck, ShieldX} from "lucide-react";
+import {Bell, CheckCheck, KeyRound, ShieldCheck, ShieldX, Trash2} from "lucide-react";
 
 interface NotificationsResponse {
   notifications: Notification[];
@@ -41,6 +41,17 @@ export function NotificationBell() {
     },
   });
 
+  const deleteReadMutation = useMutation({
+    mutationFn: () => apiFetch(`/notifications?userId=${session?.userId}`, {
+      method: "DELETE",
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["notifications", session?.userId],
+      });
+    },
+  });
+
   const markOneMutation = useMutation({
     mutationFn: (notificationId: string) => apiFetch("/notifications", {
       method: "PATCH",
@@ -55,6 +66,7 @@ export function NotificationBell() {
 
   const unreadCount = data?.unreadCount || 0;
   const notifications = data?.notifications || [];
+  const hasRead = notifications.some(n => n.read);
 
   function getNotifIcon(type: Notification["type"]) {
     switch (type) {
@@ -94,17 +106,30 @@ export function NotificationBell() {
           <h3 className="text-sm font-semibold text-card-foreground">
             Notificacoes
           </h3>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-auto py-1 text-xs text-primary hover:text-primary/80"
-              onClick={() => markAllMutation.mutate()}
-            >
-              <CheckCheck className="mr-1 h-3 w-3" />
-              Marcar todas
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto py-1 px-1 text-[10px] text-primary hover:text-primary/80 uppercase font-bold"
+                onClick={() => markAllMutation.mutate()}
+              >
+                <CheckCheck className="mr-1 h-3 w-3" />
+                Marcar todas
+              </Button>
+            )}
+            {hasRead && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto py-1 px-1 text-[10px] text-destructive hover:text-destructive/80 uppercase font-bold"
+                onClick={() => deleteReadMutation.mutate()}
+              >
+                <Trash2 className="mr-1 h-3 w-3" />
+                Limpar
+              </Button>
+            )}
+          </div>
         </div>
         <ScrollArea className="max-h-80">
           {notifications.length === 0 ? (

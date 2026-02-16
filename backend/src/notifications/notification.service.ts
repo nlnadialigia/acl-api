@@ -28,4 +28,13 @@ export class NotificationService {
       data: {read: true},
     });
   }
+
+  async deleteRead(userId: string) {
+    return this.prisma.notification.deleteMany({
+      where: {
+        userId,
+        read: true,
+      },
+    });
+  }
 }

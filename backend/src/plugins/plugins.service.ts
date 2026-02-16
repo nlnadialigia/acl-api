@@ -5,12 +5,6 @@ import {PrismaService} from '../prisma/prisma.service';
 export class PluginsService {
   constructor(private prisma: PrismaService) { }
 
-  async findAll() {
-    return this.prisma.plugin.findMany({
-      where: {isActive: true},
-    });
-  }
-
   async findAllAdmin() {
     return this.prisma.plugin.findMany();
   }
@@ -76,6 +70,9 @@ export class PluginsService {
           {name: idOrName},
         ],
       },
+      include: {
+        userPluginFavorites: true
+      }
     });
     if (!plugin) {
       throw new NotFoundException(`Plugin ${idOrName} not found`);
@@ -83,10 +80,53 @@ export class PluginsService {
     return plugin;
   }
 
+  async findAll() {
+    return this.prisma.plugin.findMany({
+      where: {isActive: true},
+      include: {
+        userPluginFavorites: true
+      }
+    });
+  }
+
+  async toggleFavorite(userId: string, pluginId: string) {
+    const existing = await this.prisma.userPluginFavorite.findUnique({
+      where: {
+        userId_pluginId: {userId, pluginId}
+      }
+    });
+
+    if (existing) {
+      await this.prisma.userPluginFavorite.delete({
+        where: {id: existing.id}
+      });
+      return {isFavorite: false};
+    } else {
+      await this.prisma.userPluginFavorite.create({
+        data: {userId, pluginId}
+      });
+      return {isFavorite: true};
+    }
+  }
+
+  async listFavorites(userId: string) {
+    const favorites = await this.prisma.userPluginFavorite.findMany({
+      where: {userId},
+      include: {plugin: true}
+    });
+    return favorites.map(f => f.plugin);
+  }
+
   async findManagedByUser(userId: string) {
     const managers = await this.prisma.pluginManager.findMany({
       where: {userId},
-      include: {plugin: true},
+      include: {
+        plugin: {
+          include: {
+            userPluginFavorites: true
+          }
+        }
+      },
     });
     return managers.map((m) => m.plugin);
   }
@@ -101,7 +141,14 @@ export class PluginsService {
   async listUserAccess(userId: string) {
     return this.prisma.accessRequest.findMany({
       where: {userId},
-      include: {plugin: true, role: true},
+      include: {
+        plugin: {
+          include: {
+            userPluginFavorites: true
+          }
+        },
+        role: true
+      },
       orderBy: {requestedAt: 'desc'},
     });
   }

@@ -23,9 +23,23 @@ export interface AccessRequest {
   requestedAt: string;
   resolvedAt?: string;
   resolvedById?: string;
+  userJustification?: string;
+  managerJustification?: string;
   user?: User;
   plugin?: Plugin;
   role?: PluginRole;
+}
+
+export interface Unit {
+  id: string;
+  name: string;
+  factories?: Factory[];
+}
+
+export interface Factory {
+  id: string;
+  name: string;
+  unitId: string;
 }
 
 export interface PluginPermissionDefinition {
@@ -52,6 +66,7 @@ export interface Plugin {
   isActive: boolean;
   roleDefinitions?: PluginRole[];
   availableDefinitions?: PluginPermissionDefinition[];
+  userPluginFavorites?: {userId: string; pluginId: string;}[];
 }
 
 export interface PluginPermission {
