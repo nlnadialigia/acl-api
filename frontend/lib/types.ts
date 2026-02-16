@@ -1,68 +1,68 @@
-export type Role = "user" | "admin" | "manager"
+export type Role = "PORTAL_ADMIN" | "PLUGIN_MANAGER" | "USER";
 
 export interface User {
-  id: string
-  username: string
-  password: string
-  role: Role
-  managedPlugins: string[]
-  createdAt: string
+  id: string;
+  email: string;
+  name?: string;
+  role: Role;
+  createdAt: string;
 }
 
-export type AccessStatus = "pending" | "approved" | "rejected"
+export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type PermissionStatus = "ACTIVE" | "REVOKED";
+export type ScopeType = "GLOBAL" | "UNIT" | "FACTORY";
 
 export interface AccessRequest {
-  id: string
-  userId: string
-  pluginId: string
-  permissionTypeId?: string
-  units: string[]
-  factories: string[]
-  status: AccessStatus
-  grantedUnits?: string[]
-  grantedFactories?: string[]
-  grantedPermissionTypeId?: string
-  createdAt: string
-  resolvedAt?: string
-  resolvedBy?: string
+  id: string;
+  userId: string;
+  pluginId: string;
+  scopeType: ScopeType;
+  scopeId?: string;
+  status: RequestStatus;
+  requestedAt: string;
+  resolvedAt?: string;
+  resolvedById?: string;
+  user?: User;
+  plugin?: Plugin;
 }
 
 export interface Plugin {
-  id: string
-  name: string
-  description: string
-  icon: string
-  isPublic: boolean
+  id: string;
+  name: string;
+  description: string;
+  isPublic: boolean;
 }
 
-export interface PermissionType {
-  id: string
-  pluginId: string
-  name: string
-  description: string
+export interface PluginPermission {
+  id: string;
+  userId: string;
+  pluginId: string;
+  scopeType: ScopeType;
+  scopeId?: string;
+  status: PermissionStatus;
 }
 
 export interface Notification {
-  id: string
-  userId: string
-  type: "access_request" | "access_granted" | "access_rejected"
-  message: string
-  relatedRequestId?: string
-  read: boolean
-  createdAt: string
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
 }
 
 export interface EmailLog {
-  id: string
-  to: string
-  subject: string
-  body: string
-  sentAt: string
+  id: string;
+  to: string;
+  subject: string;
+  template: string;
+  context: any;
+  sentAt: string;
 }
 
 export interface AuthSession {
-  userId: string
-  username: string
-  role: Role
-  managedPlugins: string[]
+  userId: string;
+  email: string;
+  role: Role;
+  token: string;
 }

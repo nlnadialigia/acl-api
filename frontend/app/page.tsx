@@ -1,15 +1,24 @@
-"use client"
+"use client";
 
-import { useAuth } from "@/lib/auth-context"
-import { LoginForm } from "@/components/login-form"
-import { Dashboard } from "@/components/dashboard"
+import {Dashboard} from "@/components/dashboard";
+import {LoginForm} from "@/components/login-form";
+import {useAuth} from "@/lib/auth-context";
+import {Loader2} from "lucide-react";
 
 export default function Home() {
-  const { isAuthenticated } = useAuth()
+  const {isAuthenticated, loading} = useAuth();
 
-  if (!isAuthenticated) {
-    return <LoginForm />
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
   }
 
-  return <Dashboard />
+  if (!isAuthenticated) {
+    return <LoginForm />;
+  }
+
+  return <Dashboard />;
 }

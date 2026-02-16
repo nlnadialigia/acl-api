@@ -1,59 +1,65 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { LogIn, UserPlus, Loader2, Shield } from "lucide-react"
+import {Button} from "@/components/ui/button";
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {Input} from "@/components/ui/input";
+import {Label} from "@/components/ui/label";
+import {useAuth} from "@/lib/auth-context";
+import {Loader2, LogIn, Shield, UserPlus} from "lucide-react";
+import {useState} from "react";
 
 export function LoginForm() {
-  const { login } = useAuth()
-  const [isRegister, setIsRegister] = useState(false)
-  const [username, setUsername] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+  const {login} = useAuth();
+  const [isRegister, setIsRegister] = useState(false);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError("")
-    setLoading(true)
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
     if (isRegister && password !== confirmPassword) {
-      setError("As senhas nao coincidem")
-      setLoading(false)
-      return
+      setError("As senhas nao coincidem");
+      setLoading(false);
+      return;
     }
 
     try {
-      const endpoint = isRegister ? "/api/auth/register" : "/api/auth/login"
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      })
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+      const endpoint = isRegister ? "/users/register" : "/auth/login";
 
-      const data = await res.json()
+      const res = await fetch(`${baseUrl}${endpoint}`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(isRegister ? {email, name} : {email}),
+      });
+
+      const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Erro desconhecido")
-        setLoading(false)
-        return
+        setError(data.message || "Credenciais inválidas");
+        return;
       }
 
+      // If login, data is { access_token, user: { id, email, role } }
+      // The current backend login returns { access_token, userId, email, role } based on my last view of AuthService.login (actually it returns { access_token })
+      // Wait, let me check the backend login response structure.
+
       login({
-        userId: data.userId,
-        username: data.username,
-        role: data.role,
-        managedPlugins: data.managedPlugins,
-      })
-    } catch {
-      setError("Erro de conexao com o servidor")
+        userId: data.userId || data.user?.id || "temp-id",
+        email: data.email || data.user?.email || email,
+        role: data.role || data.user?.role || "USER",
+        token: data.access_token,
+      });
+    } catch (err) {
+      setError("Erro de conexao com o servidor");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -69,7 +75,7 @@ export function LoginForm() {
               ACL Portal
             </h1>
             <p className="text-sm text-muted-foreground">
-              Gerenciamento de acessos e plugins
+              Gereciamento de acessos e plugins
             </p>
           </div>
         </div>
@@ -82,36 +88,21 @@ export function LoginForm() {
             <CardDescription>
               {isRegister
                 ? "Preencha os dados para criar sua conta"
-                : "Use suas credenciais para acessar o portal"}
+                : "Digite seu e-mail para acessar o portal"}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="username" className="text-card-foreground">
-                  Username
+                <Label htmlFor="email" className="text-card-foreground">
+                  E-mail
                 </Label>
                 <Input
-                  id="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Digite seu username"
-                  required
-                  className="bg-background border-input"
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="password" className="text-card-foreground">
-                  Senha
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Digite sua senha"
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="exemplo@email.com"
                   required
                   className="bg-background border-input"
                 />
@@ -119,19 +110,25 @@ export function LoginForm() {
 
               {isRegister && (
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="confirm-password" className="text-card-foreground">
-                    Confirmar Senha
+                  <Label htmlFor="name" className="text-card-foreground">
+                    Nome Completo
                   </Label>
                   <Input
-                    id="confirm-password"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirme sua senha"
+                    id="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Seu nome"
                     required
                     className="bg-background border-input"
                   />
                 </div>
+              )}
+
+              {!isRegister && (
+                <p className="text-xs text-muted-foreground italic">
+                  * No MVP, a senha ainda não é validada. Use qualquer email cadastrado.
+                </p>
               )}
 
               {error && (
@@ -157,9 +154,8 @@ export function LoginForm() {
                 <button
                   type="button"
                   onClick={() => {
-                    setIsRegister(!isRegister)
-                    setError("")
-                    setConfirmPassword("")
+                    setIsRegister(!isRegister);
+                    setError("");
                   }}
                   className="text-sm text-primary hover:underline"
                 >
@@ -172,12 +168,14 @@ export function LoginForm() {
           </CardContent>
         </Card>
 
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground">
-            Contas de teste: admin/admin123 | manager/manager123
-          </p>
-        </div>
+        {!isRegister && (
+          <div className="text-center">
+            <p className="text-xs text-muted-foreground">
+              Tente: admin@exemplo.com | manager@exemplo.com
+            </p>
+          </div>
+        )}
       </div>
     </div>
-  )
+  );
 }

@@ -120,7 +120,7 @@ export class AccessRequestService {
       );
 
       // 6. Email (Async)
-      this.email.sendEmail(request.user.email, 'Acesso Aprovado', 'approval', {plugin: request.plugin.name});
+      await this.email.sendEmail(request.user.email, 'Acesso Aprovado', 'approval', {plugin: request.plugin.name});
 
       return updatedRequest;
     });

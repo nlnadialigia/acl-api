@@ -1,77 +1,76 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { useAuth } from "@/lib/auth-context"
-import { DashboardHeader } from "@/components/dashboard-header"
-import { PluginCard } from "@/components/plugin-card"
-import { PluginPage } from "@/components/plugin-page"
-import { AdminPanel } from "@/components/admin-panel"
-import { EmailLogViewer } from "@/components/email-log-viewer"
-import { Loader2 } from "lucide-react"
-import type { Plugin, AccessRequest } from "@/lib/types"
+import {AdminPanel} from "@/components/admin-panel";
+import {DashboardHeader} from "@/components/dashboard-header";
+import {EmailLogViewer} from "@/components/email-log-viewer";
+import {PluginCard} from "@/components/plugin-card";
+import {PluginPage} from "@/components/plugin-page";
+import {apiFetch} from "@/lib/api-client";
+import {useAuth} from "@/lib/auth-context";
+import type {AccessRequest, Plugin} from "@/lib/types";
+import {useQuery} from "@tanstack/react-query";
+import {Loader2} from "lucide-react";
+import {useState} from "react";
 
 export function Dashboard() {
-  const { session } = useAuth()
-  const [showAdmin, setShowAdmin] = useState(false)
-  const [showEmails, setShowEmails] = useState(false)
-  const [activePluginId, setActivePluginId] = useState<string | null>(null)
+  const {session} = useAuth();
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showEmails, setShowEmails] = useState(false);
+  const [activePluginId, setActivePluginId] = useState<string | null>(null);
 
-  const { data: plugins, isLoading: pluginsLoading } = useQuery<Plugin[]>({
+  const {data: plugins, isLoading: pluginsLoading} = useQuery<Plugin[]>({
     queryKey: ["plugins"],
-    queryFn: async () => {
-      const res = await fetch("/api/plugins")
-      return res.json()
-    },
-  })
+    queryFn: () => apiFetch("/plugins"),
+  });
 
-  const { data: accesses } = useQuery<AccessRequest[]>({
+  // Permissões diretas do backend (AccessRequests resolvidos)
+  const {data: accesses} = useQuery<AccessRequest[]>({
     queryKey: ["accesses", session?.userId],
-    queryFn: async () => {
-      const res = await fetch(`/api/access?userId=${session?.userId}`)
-      return res.json()
-    },
+    queryFn: () => apiFetch(`/plugins/my-permissions`), // Assumindo este endpoint ou similar
     enabled: !!session?.userId,
-  })
+  });
 
-  if (!session) return null
+  if (!session) return null;
 
   // If a plugin is open, show the plugin page
   if (activePluginId) {
-    const plugin = plugins?.find((p) => p.id === activePluginId)
+    const plugin = plugins?.find((p) => p.id === activePluginId);
     if (plugin) {
       return (
         <PluginPage
           plugin={plugin}
           onBack={() => setActivePluginId(null)}
         />
-      )
+      );
     }
   }
 
   function handleOpenPlugin(pluginId: string) {
-    setActivePluginId(pluginId)
+    setActivePluginId(pluginId);
   }
 
+  const isManagementRole = session.role === "PORTAL_ADMIN" || session.role === "PLUGIN_MANAGER";
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground">
       <DashboardHeader
         onShowAdmin={() => {
-          setShowAdmin(!showAdmin)
-          setShowEmails(false)
+          setShowAdmin(!showAdmin);
+          setShowEmails(false);
         }}
         onShowEmails={() => {
-          setShowEmails(!showEmails)
-          setShowAdmin(false)
+          setShowEmails(!showEmails);
+          setShowAdmin(false);
         }}
         showAdmin={showAdmin}
         showEmails={showEmails}
+        canSeeAdmin={isManagementRole}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-8 lg:px-8">
-        {showAdmin ? (
+        {showAdmin && isManagementRole ? (
           <AdminPanel />
-        ) : showEmails ? (
+        ) : showEmails && session.role === "PORTAL_ADMIN" ? (
           <EmailLogViewer />
         ) : (
           <>
@@ -93,7 +92,7 @@ export function Dashboard() {
                 {plugins?.map((plugin) => {
                   const access = accesses?.find(
                     (a) => a.pluginId === plugin.id
-                  )
+                  );
                   return (
                     <PluginCard
                       key={plugin.id}
@@ -102,7 +101,7 @@ export function Dashboard() {
                       userId={session.userId}
                       onOpenPlugin={handleOpenPlugin}
                     />
-                  )
+                  );
                 })}
               </div>
             )}
@@ -110,5 +109,5 @@ export function Dashboard() {
         )}
       </main>
     </div>
-  )
+  );
 }
