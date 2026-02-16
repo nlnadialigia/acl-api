@@ -60,6 +60,7 @@ export function AdminPanel() {
   const [editingPlugin, setEditingPlugin] = useState<Plugin | null>(null);
   const [pluginName, setPluginName] = useState("");
   const [pluginDescription, setPluginDescription] = useState("");
+  const [pluginIsPublic, setPluginIsPublic] = useState(false);
 
   // Queries
   const {data: pendingRequests, isLoading: requestsLoading} = useQuery<AccessRequest[]>({
@@ -125,6 +126,7 @@ export function AdminPanel() {
         body: JSON.stringify({
           name: pluginName,
           description: pluginDescription,
+          isPublic: pluginIsPublic,
         }),
       });
     },
@@ -134,6 +136,27 @@ export function AdminPanel() {
       setEditingPlugin(null);
       setPluginName("");
       setPluginDescription("");
+      setPluginIsPublic(false);
+    },
+  });
+
+  const editPlugin = (plugin: Plugin) => {
+    setEditingPlugin(plugin);
+    setPluginName(plugin.name);
+    setPluginDescription(plugin.description || "");
+    setPluginIsPublic(plugin.isPublic || false);
+    setPluginDialogOpen(true);
+  };
+
+  const togglePluginPublicMutation = useMutation({
+    mutationFn: async ({id, isPublic}: {id: string; isPublic: boolean;}) => {
+      return apiFetch(`/admin/plugins/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({isPublic}),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["plugins-admin"]});
     },
   });
 
@@ -344,6 +367,7 @@ export function AdminPanel() {
                       <TableRow className="border-border">
                         <TableHead className="text-muted-foreground">Nome</TableHead>
                         <TableHead className="text-muted-foreground">Descrição</TableHead>
+                        <TableHead className="text-muted-foreground">Tipo</TableHead>
                         <TableHead className="text-muted-foreground">Status</TableHead>
                         <TableHead className="text-right text-muted-foreground">Ações</TableHead>
                       </TableRow>
@@ -356,6 +380,15 @@ export function AdminPanel() {
                             {plugin.description || "-"}
                           </TableCell>
                           <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={`cursor-pointer ${plugin.isPublic ? "bg-blue-500/15 text-blue-500 border-blue-500/30" : "bg-amber-500/15 text-amber-500 border-amber-500/30"}`}
+                              onClick={() => togglePluginPublicMutation.mutate({id: plugin.id, isPublic: !plugin.isPublic})}
+                            >
+                              {plugin.isPublic ? "Público" : "Privado"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
                             <Badge variant={plugin.isActive ? "default" : "secondary"} className={plugin.isActive ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" : "bg-muted text-muted-foreground"}>
                               {plugin.isActive ? "Ativo" : "Inativo"}
                             </Badge>
@@ -365,12 +398,7 @@ export function AdminPanel() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => {
-                                  setEditingPlugin(plugin);
-                                  setPluginName(plugin.name);
-                                  setPluginDescription(plugin.description || "");
-                                  setPluginDialogOpen(true);
-                                }}
+                                onClick={() => editPlugin(plugin)}
                               >
                                 Editar
                               </Button>
@@ -491,6 +519,24 @@ export function AdminPanel() {
                 onChange={(e) => setPluginDescription(e.target.value)}
                 placeholder="Uma breve descrição da funcionalidade..."
               />
+            </div>
+            <div className="flex items-center space-x-2 py-2">
+              <Checkbox
+                id="plugin-public"
+                checked={pluginIsPublic}
+                onCheckedChange={(checked) => setPluginIsPublic(!!checked)}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label
+                  htmlFor="plugin-public"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Plugin Público
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Aprovação automática ao solicitar acesso.
+                </p>
+              </div>
             </div>
             <Button
               className="w-full"

@@ -27,6 +27,63 @@ export class AccessRequestService {
     });
     if (existing) throw new BadRequestException('A pending request already exists for this plugin');
 
+    if (plugin.isPublic) {
+      return this.prisma.$transaction(async (tx) => {
+        // 1. Create Request (Already Approved)
+        const request = await tx.accessRequest.create({
+          data: {
+            userId,
+            pluginId,
+            scopeType,
+            scopeId,
+            status: RequestStatus.APPROVED,
+            resolvedAt: new Date(),
+          },
+          include: {user: true},
+        });
+
+        // 2. Create/Update Permission
+        await tx.pluginPermission.upsert({
+          where: {
+            userId_pluginId: {userId, pluginId}
+          },
+          update: {
+            status: PermissionStatus.ACTIVE,
+            scopeType,
+            scopeId,
+          },
+          create: {
+            userId,
+            pluginId,
+            scopeType,
+            scopeId,
+            status: PermissionStatus.ACTIVE,
+          },
+        });
+
+        // 3. Audit Log
+        await this.audit.log({
+          targetId: userId,
+          resourceId: pluginId,
+          action: 'AUTO_APPROVE',
+          actorId: userId, // User self-granted access to a public plugin
+          details: {requestId: request.id, scope: scopeType, scopeId},
+        });
+
+        // 4. Invalidate Cache
+        await this.cache.invalidate(userId, plugin.name);
+
+        // 5. Notify User (Optional, but good for consistency)
+        await this.notification.notify(
+          userId,
+          'Acesso Concedido',
+          `Você agora tem acesso ao plugin público ${plugin.name}.`,
+        );
+
+        return request;
+      });
+    }
+
     return this.prisma.accessRequest.create({
       data: {
         userId,

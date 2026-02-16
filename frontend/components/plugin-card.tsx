@@ -50,6 +50,10 @@ export function PluginCard({plugin, access, userId, onOpenPlugin}: PluginCardPro
     onSuccess: () => {
       queryClient.invalidateQueries({queryKey: ["accesses", userId]});
       setDialogOpen(false);
+      // If it was a public plugin, open it immediately
+      if (plugin.isPublic) {
+        onOpenPlugin(plugin.id);
+      }
     },
   });
 
@@ -100,8 +104,8 @@ export function PluginCard({plugin, access, userId, onOpenPlugin}: PluginCardPro
         ) : (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                Solicitar Acesso
+              <Button size="sm" className={`w-full ${plugin.isPublic ? "bg-blue-600 hover:bg-blue-700" : "bg-primary hover:bg-primary/90"} text-white`}>
+                {plugin.isPublic ? "Ativar Acesso" : "Solicitar Acesso"}
               </Button>
             </DialogTrigger>
             <DialogContent className="bg-card border-border">
@@ -155,10 +159,10 @@ export function PluginCard({plugin, access, userId, onOpenPlugin}: PluginCardPro
                 <Button
                   onClick={() => requestMutation.mutate()}
                   disabled={requestMutation.isPending || (scopeType !== "GLOBAL" && !scopeId)}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  className={`w-full ${plugin.isPublic ? "bg-blue-600 hover:bg-blue-700" : "bg-primary hover:bg-primary/90"} text-white`}
                 >
                   {requestMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Confirmar Solicitacao
+                  {plugin.isPublic ? "Ativar Agora" : "Confirmar Solicitacao"}
                 </Button>
               </div>
             </DialogContent>

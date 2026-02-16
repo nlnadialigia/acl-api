@@ -15,13 +15,13 @@ export class PluginsService {
     return this.prisma.plugin.findMany();
   }
 
-  async create(data: {name: string; description?: string; isActive?: boolean;}) {
+  async create(data: {name: string; description?: string; isActive?: boolean; isPublic?: boolean;}) {
     return this.prisma.plugin.create({
       data,
     });
   }
 
-  async update(id: string, data: {name?: string; description?: string; isActive?: boolean;}) {
+  async update(id: string, data: {name?: string; description?: string; isActive?: boolean; isPublic?: boolean;}) {
     return this.prisma.plugin.update({
       where: {id},
       data,

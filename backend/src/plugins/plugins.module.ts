@@ -9,6 +9,6 @@ import {PluginsService} from './plugins.service';
   imports: [AuthModule],
   controllers: [PluginsController, AdminPluginsController],
   providers: [PluginsService, PermissionCacheService],
-  exports: [PluginsService],
+  exports: [PluginsService, PermissionCacheService],
 })
 export class PluginsModule { }
