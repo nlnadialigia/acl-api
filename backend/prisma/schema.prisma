@@ -117,7 +117,7 @@ model PluginPermission {
   plugin Plugin @relation(fields: [pluginId], references: [id])
 
   // 2.3 Indexes
-  @@index([userId, pluginId])
+  @@unique([userId, pluginId])
   @@index([userId, status])
   @@map("plugin_permissions")
 }
@@ -139,6 +139,19 @@ model AccessRequest {
   // 2.3 Indexes
   @@index([pluginId, status])
   @@map("access_requests")
+}
+
+model Email {
+  id        String   @id @default(uuid())
+  to        String
+  subject   String
+  template  String
+  context   Json
+  sent      Boolean  @default(false)
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@map("emails")
 }
 
 model PermissionAuditLog {

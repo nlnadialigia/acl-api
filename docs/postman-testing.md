@@ -1,0 +1,94 @@
+# Guia de Teste - Postman
+
+Este documento descreve como testar o fluxo completo da API de ACL, desde o cadastro até a aprovação e acesso a plugins.
+
+## 🚀 Preparação
+
+1.  **Swagger**: Acesse `http://localhost:3000/api` para ver todos os endpoints e modelos.
+2.  **Variáveis Postman**: Recomenda-se criar um Environment com:
+    *   `baseUrl`: `http://localhost:3000`
+    *   `token_user`: (JWT do usuário comum)
+    *   `token_admin`: (JWT do Portal Admin)
+
+---
+
+## 📂 1. Fluxo de Usuário (Cadastro e Login)
+
+### Cadastro
+*   **POST** `/users/register`
+*   **Body**:
+    ```json
+    {
+      "email": "user@exemplo.com",
+      "name": "João Silva"
+    }
+    ```
+
+### Login
+*   **POST** `/auth/login`
+*   **Body**: `{"email": "user@exemplo.com"}`
+*   **Resposta**: Copie o `access_token` e salve como `token_user`.
+
+---
+
+## 📂 2. Fluxo de Solicitação (Access Requests)
+
+### Solicitar Acesso
+*   **POST** `/requests`
+*   **Headers**: `Authorization: Bearer {{token_user}}`
+*   **Body**:
+    ```json
+    {
+      "pluginId": "ID_DO_PLUGIN",
+      "scopeType": "GLOBAL"
+    }
+    ```
+
+---
+
+## 📂 3. Fluxo Administrativo (Aprovação)
+
+### Listar Solicitações
+*   **GET** `/requests`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+
+### Aprovar Solicitação
+*   **POST** `/requests/{{requestId}}/approve`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+
+---
+
+## 📂 4. Validação de Acesso (Plugins)
+
+### Acessar Plugin (Bate no Cache)
+*   **GET** `/plugins`
+*   **Headers**: `Authorization: Bearer {{token_user}}`
+*   **Comportamento**: A primeira chamada busca no banco e salva no Redis. A segunda chamada vem direto do Redis.
+
+---
+
+## 📂 5. Revogação e Invalidação (Pente Fino)
+
+### Revogar Acesso
+*   **POST** `/requests/revoke`
+*   **Headers**: `Authorization: Bearer {{token_admin}}`
+*   **Body**:
+    ```json
+    {
+      "userId": "ID_DO_USER",
+      "pluginId": "ID_DO_PLUGIN"
+    }
+    ```
+
+### Testar Invalidação
+*   Tente acessar `/plugins` novamente com o `token_user`. O acesso deve ser negado imediatamente (403), pois o cache foi invalidado durante a revogação.
+
+---
+
+## 📂 6. Auditoria e Notificações
+
+### Ver Notificações
+*   **GET** `/notifications` (Precisa implementar controller se desejar listar via API, ou ver via Banco)
+
+### Ver Auditoria
+*   Verifique a tabela `permission_audit_logs` no banco de dados para confirmar os registros de `APPROVE_ACCESS` e `REVOKE_ACCESS`.
