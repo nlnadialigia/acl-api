@@ -1,81 +1,69 @@
-"use client"
+"use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
+import {Button} from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Bell, CheckCheck, ShieldCheck, ShieldX, KeyRound } from "lucide-react"
-import type { Notification } from "@/lib/types"
+} from "@/components/ui/popover";
+import {ScrollArea} from "@/components/ui/scroll-area";
+import {apiFetch} from "@/lib/api-client";
+import {useAuth} from "@/lib/auth-context";
+import type {Notification} from "@/lib/types";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {Bell, CheckCheck, KeyRound, ShieldCheck, ShieldX} from "lucide-react";
 
 interface NotificationsResponse {
-  notifications: Notification[]
-  unreadCount: number
+  notifications: Notification[];
+  unreadCount: number;
 }
 
 export function NotificationBell() {
-  const { session } = useAuth()
-  const queryClient = useQueryClient()
+  const {session} = useAuth();
+  const queryClient = useQueryClient();
 
-  const { data } = useQuery<NotificationsResponse>({
+  const {data} = useQuery<NotificationsResponse>({
     queryKey: ["notifications", session?.userId],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/notifications?userId=${session?.userId}`
-      )
-      return res.json()
-    },
+    queryFn: () => apiFetch(`/notifications?userId=${session?.userId}`),
     enabled: !!session?.userId,
-    refetchInterval: 2000,
-  })
+    refetchInterval: 5000,
+  });
 
   const markAllMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: session?.userId, markAll: true }),
-      })
-      return res.json()
-    },
+    mutationFn: () => apiFetch("/notifications", {
+      method: "PATCH",
+      body: JSON.stringify({userId: session?.userId, markAll: true}),
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["notifications", session?.userId],
-      })
+      });
     },
-  })
+  });
 
   const markOneMutation = useMutation({
-    mutationFn: async (notificationId: string) => {
-      const res = await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notificationId }),
-      })
-      return res.json()
-    },
+    mutationFn: (notificationId: string) => apiFetch("/notifications", {
+      method: "PATCH",
+      body: JSON.stringify({notificationId}),
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["notifications", session?.userId],
-      })
+      });
     },
-  })
+  });
 
-  const unreadCount = data?.unreadCount || 0
-  const notifications = data?.notifications || []
+  const unreadCount = data?.unreadCount || 0;
+  const notifications = data?.notifications || [];
 
   function getNotifIcon(type: Notification["type"]) {
     switch (type) {
       case "access_request":
-        return <KeyRound className="h-4 w-4 text-primary" />
+        return <KeyRound className="h-4 w-4 text-primary" />;
       case "access_granted":
-        return <ShieldCheck className="h-4 w-4 text-emerald-400" />
+        return <ShieldCheck className="h-4 w-4 text-emerald-400" />;
       case "access_rejected":
-        return <ShieldX className="h-4 w-4 text-destructive" />
+        return <ShieldX className="h-4 w-4 text-destructive" />;
     }
   }
 
@@ -130,21 +118,19 @@ export function NotificationBell() {
                   key={notif.id}
                   onClick={() => {
                     if (!notif.read) {
-                      markOneMutation.mutate(notif.id)
+                      markOneMutation.mutate(notif.id);
                     }
                   }}
-                  className={`flex items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/50 ${
-                    !notif.read ? "bg-primary/5" : ""
-                  }`}
+                  className={`flex items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/50 ${!notif.read ? "bg-primary/5" : ""
+                    }`}
                 >
                   <div className="mt-0.5">{getNotifIcon(notif.type)}</div>
                   <div className="flex-1">
                     <p
-                      className={`text-xs leading-relaxed ${
-                        !notif.read
+                      className={`text-xs leading-relaxed ${!notif.read
                           ? "font-medium text-card-foreground"
                           : "text-muted-foreground"
-                      }`}
+                        }`}
                     >
                       {notif.message}
                     </p>
@@ -162,5 +148,5 @@ export function NotificationBell() {
         </ScrollArea>
       </PopoverContent>
     </Popover>
-  )
+  );
 }

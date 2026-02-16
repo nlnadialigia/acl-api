@@ -1,18 +1,21 @@
-import {PrismaPg} from '@prisma/adapter-pg';
-import {PrismaClient} from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
 import "dotenv/config";
+import { plugins } from './aux';
 
 
 const connectionString = `${process.env.DATABASE_URL}`;
 
-const adapter = new PrismaPg({connectionString});
-const prisma = new PrismaClient({adapter});
+const adapter = new PrismaPg({ connectionString });
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const adminEmail = 'admin@portal.com';
 
-  const admin = await prisma.user.upsert({
-    where: {email: adminEmail},
+  console.log('Seeding admin...');
+
+  await prisma.user.upsert({
+    where: { email: adminEmail },
     update: {},
     create: {
       email: adminEmail,
@@ -21,8 +24,14 @@ async function main() {
     },
   });
 
+  console.log('Seeding plugins...');
+
+  await prisma.plugin.createMany({
+    data: plugins
+  });
+
+
   console.log('Seeding finished.');
-  console.log({admin});
 }
 
 main()

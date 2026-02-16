@@ -6,6 +6,12 @@ import {AppModule} from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.enableCors({
+    origin: '*', // Em produção, mude para o domínio real
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+  });
+
   const config = new DocumentBuilder()
     .setTitle('ACL API')
     .setDescription('Access Control List API with JWT and RBAC')
