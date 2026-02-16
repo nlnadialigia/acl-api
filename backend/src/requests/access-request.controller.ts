@@ -52,21 +52,23 @@ export class AccessRequestController {
     return this.requestService.rejectRequest(id, req.user.userId, body.reason);
   }
 
-  @Post('revoke')
+  @Post('grant')
   @Roles(Role.PORTAL_ADMIN, Role.PLUGIN_MANAGER)
   @UseGuards(RolesGuard)
-  @ApiOperation({summary: 'Revoke a user permission'})
+  @ApiOperation({summary: 'Directly grant access to a user (Admin/Manager)'})
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
         userId: {type: 'string'},
         pluginId: {type: 'string'},
+        scopeType: {enum: ['GLOBAL', 'UNIT', 'FACTORY']},
+        scopeId: {type: 'string', nullable: true},
       },
-      required: ['userId', 'pluginId'],
+      required: ['userId', 'pluginId', 'scopeType'],
     },
   })
-  async revoke(@Request() req, @Body() body: {userId: string; pluginId: string;}) {
-    return this.requestService.revokePermission(body.userId, body.pluginId, req.user.userId);
+  async grant(@Request() req, @Body() body: {userId: string; pluginId: string; scopeType: ScopeType; scopeId?: string;}) {
+    return this.requestService.grantAccess(body, req.user);
   }
 }

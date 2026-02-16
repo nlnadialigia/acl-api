@@ -73,14 +73,14 @@ export function AdminPanel() {
 
   const {data: users} = useQuery<User[]>({
     queryKey: ["users"],
-    queryFn: () => apiFetch("/users"), // Assumindo endpoint de lista de usuários
-    enabled: session?.role === "PORTAL_ADMIN",
+    queryFn: () => apiFetch("/users"),
+    enabled: !!session,
   });
 
   const {data: plugins} = useQuery<Plugin[]>({
     queryKey: ["plugins-admin"],
     queryFn: () => apiFetch("/admin/plugins"),
-    enabled: isAdmin,
+    enabled: !!session,
   });
 
   // Mutations
@@ -563,6 +563,93 @@ export function AdminPanel() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+
+      {/* GRANT ACCESS DIALOG */}
+      <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-card-foreground">Conceder Acesso Direto</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="grant-user">Selecionar Usuário</Label>
+              <select
+                id="grant-user"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={grantTargetUserId}
+                onChange={(e) => setGrantTargetUserId(e.target.value)}
+              >
+                <option value="">Selecione um usuário...</option>
+                {users?.map((u) => (
+                  <option key={u.id} value={u.id}>{u.email}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="grant-plugin">Selecionar Plugin</Label>
+              <select
+                id="grant-plugin"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={grantPluginId}
+                onChange={(e) => setGrantPluginId(e.target.value)}
+              >
+                <option value="">Selecione um plugin...</option>
+                {plugins?.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Label className="text-sm font-medium">Escopo</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["GLOBAL", "UNIT", "FACTORY"] as ScopeType[]).map((type) => (
+                  <Button
+                    key={type}
+                    variant={grantScopeType === type ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setGrantScopeType(type);
+                      setGrantScopeId("");
+                    }}
+                  >
+                    {type}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {grantScopeType !== "GLOBAL" && (
+              <div className="flex flex-col gap-2">
+                <Label className="text-sm font-medium">
+                  {grantScopeType === "UNIT" ? "Unidade" : "Fábrica"}
+                </Label>
+                <div className="rounded-lg border border-input bg-background p-3 grid grid-cols-1 gap-2">
+                  {(grantScopeType === "UNIT" ? AVAILABLE_UNITS : AVAILABLE_FACTORIES).map((id) => (
+                    <label key={id} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <Checkbox
+                        checked={grantScopeId === id}
+                        onCheckedChange={() => setGrantScopeId(id)}
+                      />
+                      {id}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Button
+              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => grantAccessMutation.mutate()}
+              disabled={grantAccessMutation.isPending || !grantTargetUserId || !grantPluginId || (grantScopeType !== "GLOBAL" && !grantScopeId)}
+            >
+              {grantAccessMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+              Conceder Acesso
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div >
   );
 }

@@ -17,6 +17,14 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @Get()
+  @ApiOperation({summary: 'List all users'})
+  async list() {
+    return this.usersService.findAll();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get(':id')
   @ApiOperation({summary: 'Get user by ID'})
   async getProfile(@Param('id') id: string) {

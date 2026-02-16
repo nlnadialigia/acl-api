@@ -87,7 +87,20 @@ Para facilitar os testes, você pode importar toda a especificação da API de u
 
 ### Aprovar Solicitação
 *   **POST** `/requests/{{requestId}}/approve`
+*   **Headers**: `Authorization: Bearer {{token_admin}}` (ou token_manager se gerenciar o plugin)
+
+### Conceder Acesso Direto (Bypass)
+*   **POST** `/requests/grant`
 *   **Headers**: `Authorization: Bearer {{token_admin}}`
+*   **Body**:
+    ```json
+    {
+      "userId": "ID_DO_USER",
+      "pluginId": "ID_DO_PLUGIN",
+      "scopeType": "UNIT",
+      "scopeId": "Unidade SP"
+    }
+    ```
 
 ---
 

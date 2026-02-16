@@ -245,4 +245,65 @@ export class AccessRequestService {
       return updatedPermission;
     });
   }
+
+  async grantAccess(data: {userId: string; pluginId: string; scopeType: ScopeType; scopeId?: string;}, actor: {userId: string, role: Role;}) {
+    const plugin = await this.prisma.plugin.findUnique({where: {id: data.pluginId}});
+    if (!plugin) throw new NotFoundException('Plugin not found');
+
+    // If manager, check if they manage this plugin
+    if (actor.role === Role.PLUGIN_MANAGER) {
+      const isManager = await this.prisma.pluginManager.findFirst({
+        where: {userId: actor.userId, pluginId: data.pluginId},
+      });
+      if (!isManager) throw new BadRequestException('You do not have permission to manage this plugin');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Upsert Permission
+      const permission = await tx.pluginPermission.upsert({
+        where: {
+          userId_pluginId: {userId: data.userId, pluginId: data.pluginId}
+        },
+        update: {
+          status: PermissionStatus.ACTIVE,
+          scopeType: data.scopeType,
+          scopeId: data.scopeId,
+        },
+        create: {
+          userId: data.userId,
+          pluginId: data.pluginId,
+          scopeType: data.scopeType,
+          scopeId: data.scopeId,
+          status: PermissionStatus.ACTIVE,
+        },
+        include: {user: true},
+      });
+
+      // 2. Audit Log
+      await this.audit.log({
+        targetId: data.userId,
+        resourceId: data.pluginId,
+        action: 'GRANT_ACCESS',
+        actorId: actor.userId,
+        details: {scope: data.scopeType, scopeId: data.scopeId},
+      });
+
+      // 3. Invalidate Cache
+      await this.cache.invalidate(data.userId, plugin.name);
+
+      // 4. Notify User
+      await this.notification.notify(
+        data.userId,
+        'Acesso Concedido',
+        `Um administrador concedeu a você acesso ao plugin ${plugin.name}.`,
+      );
+
+      // 5. Email (Optional)
+      if (permission.user.email) {
+        await this.email.sendEmail(permission.user.email, 'Novo Acesso Concedido', 'approval', {plugin: plugin.name});
+      }
+
+      return permission;
+    });
+  }
 }

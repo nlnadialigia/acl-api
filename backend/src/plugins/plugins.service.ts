@@ -51,6 +51,14 @@ export class PluginsService {
     return plugin;
   }
 
+  async findManagedByUser(userId: string) {
+    const managers = await this.prisma.pluginManager.findMany({
+      where: {userId},
+      include: {plugin: true},
+    });
+    return managers.map((m) => m.plugin);
+  }
+
   // Helper to fetch unit/factory details for testing
   async getUnitStructure() {
     return this.prisma.unit.findMany({
